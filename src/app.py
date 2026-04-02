@@ -1,11 +1,14 @@
 import os
+import sys
+from pathlib import Path
 import threading
 from flask import Flask
 from loguru import logger
 import schedule
 import time
 
-# Import our autonomous scan loop
+# Ensure Python can find local modules inside the src folder when run by Gunicorn
+sys.path.insert(0, str(Path(__file__).parent))
 from run_autonomous import autonomous_scan
 
 app = Flask(__name__)
