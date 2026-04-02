@@ -36,11 +36,11 @@ def run_agent_loop():
             logger.error(f"Error in background loop: {e}")
             time.sleep(60) # Prevent rapid crash loops
 
+# Start the continuous background trading agent loop in a separate thread globally for Gunicorn
+worker = threading.Thread(target=run_agent_loop, daemon=True)
+worker.start()
+
 if __name__ == '__main__':
-    # Start the continuous background trading agent loop in a separate thread
-    worker = threading.Thread(target=run_agent_loop, daemon=True)
-    worker.start()
-    
-    # Start the Flask web server to keep Render/Cloud platform happy
+    # Used only if running app.py locally without Gunicorn
     port = int(os.environ.get('PORT', 10000))
     app.run(host='0.0.0.0', port=port)

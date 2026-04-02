@@ -10,7 +10,7 @@ from datetime import datetime
 sys.path.insert(0, str(Path(__file__).parent))
 from trading_agent import InstitutionalTradingAgent
 
-agent = InstitutionalTradingAgent()
+
 
 # Top 100 NSE Stocks (Nifty 100)
 WATCHLIST = [
@@ -32,6 +32,12 @@ def autonomous_scan():
     logger.info(f"Starting Autonomous Market Scan of {len(WATCHLIST)} stocks at {datetime.now().strftime('%H:%M:%S')}")
     logger.info("=" * 80)
     
+    try:
+        agent = InstitutionalTradingAgent()
+    except Exception as e:
+        logger.error(f"Could not start scan. Is your GROQ_API_KEY set in Render Environment Variables? Error: {e}")
+        return
+
     for ticker in WATCHLIST:
         logger.info(f"Triggering Orchestrator for {ticker}...")
         prompt = f"""
