@@ -1,0 +1,37 @@
+﻿from enum import Enum
+
+class TradingMode(Enum):
+    PAPER = "paper"
+    BACKTEST = "backtest"
+    LIVE = "live"
+
+class Strategy(Enum):
+    INTRADAY = "intraday"
+    SWING = "swing"
+
+class OrderType(Enum):
+    BUY = "BUY"
+    SELL = "SELL"
+
+class SignalType(Enum):
+    STRONG_BUY = "STRONG_BUY"
+    BUY = "BUY"
+    NEUTRAL = "NEUTRAL"
+    SELL = "SELL"
+    STRONG_SELL = "STRONG_SELL"
+
+MARKET_OPEN = "09:15"
+MARKET_CLOSE = "15:30"
+BROKERAGE_PERCENT = 0.03
+STT_PERCENT = 0.025
+MAX_RISK_PER_TRADE = 2.0
+MAX_DAILY_LOSS = 3.0
+MAX_DRAWDOWN = 15.0
+MAX_POSITIONS = 10
+DEFAULT_RSI_PERIOD = 14
+DEFAULT_ATR_PERIOD = 14
+API_TIMEOUT_SEC = 30
+CURRENCY = "INR"
+CURRENCY_SYMBOL = "₹"
+INTRADAY_MIN_CONFIDENCE = 0.65
+SWING_MIN_CONFIDENCE = 0.70

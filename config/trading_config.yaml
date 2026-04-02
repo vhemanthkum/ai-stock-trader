@@ -1,0 +1,128 @@
+﻿# INSTITUTIONAL-GRADE AI TRADING SYSTEM
+# Acts like: Goldman Sachs, JP Morgan, Morgan Stanley
+
+trading:
+  mode: "institutional"  # Think REAL money, REAL consequences
+  initial_capital: 100000000  # ₹100 Crores (Real institutional size)
+  
+  # REAL RISK MANAGEMENT (Like actual hedge funds)
+  risk_per_trade: 0.5  # Only 0.5% per trade (strict risk control)
+  max_daily_loss_limit: 2.5  # Max 2.5% loss per day (circuit breaker)
+  max_monthly_loss_limit: 5.0  # Max 5% loss per month
+  
+  leverage: 10.0  # Institutional leverage (real banks use 10-20x)
+  position_sizing: "kelly_criterion"  # Advanced sizing (not simple %)
+  
+  # INSTITUTIONAL STRATEGIES
+  strategies:
+    - name: "Arbitrage"
+      enabled: true
+      min_spread: 0.3  # Only trade when spread > 0.3%
+      holding_time: "5-30 minutes"
+    
+    - name: "Momentum Trading"
+      enabled: true
+      timeframe: "15min"
+      min_volume: 1000000  # Only high-volume stocks
+      momentum_threshold: 2.5  # Strict 2.5% momentum requirement
+    
+    - name: "Statistical Arbitrage"
+      enabled: true
+      correlation_threshold: 0.85
+      reversion_zscore: 2.0
+    
+    - name: "Smart Order Routing"
+      enabled: true
+      split_orders: true
+      hide_orders: true
+      execution_time: "5-30 seconds"
+
+# INSTITUTIONAL WATCHLIST (Large-cap, high-liquidity only)
+watchlist:
+  - TCS        # ₹30L+ Cr market cap
+  - INFY       # IT giant
+  - HDFC       # Banking
+  - RELIANCE   # Energy & Retail
+  - ICICIBANK  # Large bank
+  - BAJAJFINSV # Financial services
+  - LT         # Infrastructure
+  - ASIANPAINT # Defensive
+  - MARUTI     # Auto
+  - HCLTECH    # IT services
+
+# INSTITUTIONAL FEATURES
+institutional:
+  track_whale_movements: true  # Monitor FII/DII flows
+  institutional_flows:
+    - FII_BUY_THRESHOLD: 100  # Crores
+    - DII_BUY_THRESHOLD: 50
+    - BLOCK_DEAL_TRACKING: true
+  
+  market_microstructure:
+    order_book_analysis: true
+    spoofing_detection: true  # Detect fake orders
+    front_running_protection: true
+  
+  # REAL VOLATILITY PRICING
+  volatility_models:
+    - GARCH  # Real volatility forecasting
+    - EWMA
+    - Realized_Volatility
+  
+  # REAL OPTIONS PRICING
+  derivatives_trading:
+    enabled: true
+    strategies:
+      - covered_calls
+      - protective_puts
+      - spreads
+      - straddles
+
+# REAL MONEY PSYCHOLOGY
+psychological_limits:
+  daily_trading_limit: 50  # Max 50 trades per day (institutional discipline)
+  position_hold_min: 5  # Min 5 min hold (avoid overtrading)
+  emotional_override: false  # NO emotional decisions
+  max_consecutive_losses: 5  # Stop if 5 losses in a row
+
+# REAL EXECUTION
+execution:
+  order_type: "LIMIT"  # LIMIT orders only (like real traders)
+  slippage_buffer: 0.1  # Account for 0.1% slippage
+  market_impact_adjustment: true
+  execution_venues:
+    - NSE  # National Stock Exchange (primary)
+    - BSE  # Bombay Stock Exchange (secondary)
+  smart_execution: true
+
+# REAL PERFORMANCE TRACKING
+performance:
+  track_against: "NIFTY50"  # Beat the benchmark
+  sharpe_ratio_target: 2.5  # Professional fund target
+  max_drawdown: 10.0  # Institutional limit
+  
+  metrics:
+    - cumulative_return
+    - sharpe_ratio
+    - sortino_ratio
+    - calmar_ratio
+    - max_drawdown
+    - win_rate
+    - profit_factor
+    - recovery_factor
+
+# INSTITUTIONAL RISK LIMITS
+risk_limits:
+  sector_concentration: 20  # Max 20% in one sector
+  single_stock_max: 5  # Max 5% in one stock
+  country_risk: 0  # India only (no forex)
+  credit_risk: "AAA"  # Only invest in creditworthy instruments
+  liquidity_min: "1 crore"  # Min turnover per stock
+
+# COMPLIANCE & REGULATIONS
+compliance:
+  track_regulations: true
+  insider_trading_check: true
+  market_abuse_prevention: true
+  audit_trail: true
+  record_all_trades: true
