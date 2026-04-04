@@ -19,6 +19,11 @@ from loguru import logger
 # ── Critical: add src/ to path BEFORE any local imports ─────────────────────
 sys.path.insert(0, str(Path(__file__).parent))
 
+# Ensure logs directory exists and configure logger to write to file
+log_dir = Path(__file__).parent.parent / "logs"
+log_dir.mkdir(exist_ok=True)
+logger.add(str(log_dir / "autonomous.log"), rotation="10 MB", retention="7 days")
+
 # Load .env (works locally; Render injects env vars directly)
 from dotenv import load_dotenv
 load_dotenv(override=True)
