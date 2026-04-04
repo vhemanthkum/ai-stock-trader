@@ -10,6 +10,7 @@ from datetime import datetime
 import json
 from data_ingestion.market_data import MarketData
 from data_ingestion.news_sentiment import NewsSentiment
+from notifications import send_telegram_alert
 
 load_dotenv(verbose=True)
 
@@ -221,6 +222,20 @@ Daily Risk Budget Remaining: ₹{25000000 - self.trading_state['daily_loss']:,}
         self.trading_state["open_positions"].append(trade)
         self.trading_state["trades_today"] += 1
         
+        # Send Telegram push notification
+        action_color = "🟢" if action.upper() == "BUY" else "🔴"
+        alert_msg = (
+            f"{action_color} <b>NEW TRADE EXECUTED</b>\n\n"
+            f"<b>Stock:</b> {ticker}\n"
+            f"<b>Action:</b> {action.upper()}\n"
+            f"<b>Qty:</b> {quantity}\n"
+            f"<b>Entry:</b> ₹{entry_price}\n"
+            f"<b>Target:</b> ₹{target}\n"
+            f"<b>Stop Loss:</b> ₹{stop_loss}\n\n"
+            f"🤖 <i>AlphaV-7 Autonomous</i>"
+        )
+        send_telegram_alert(alert_msg)
+        
         return trade
     
     def close_trade(self, ticker, exit_price, reason):
@@ -234,6 +249,19 @@ Daily Risk Budget Remaining: ₹{25000000 - self.trading_state['daily_loss']:,}
                 
                 self.trading_state["closed_trades"].append(closed_trade)
                 self.trading_state["daily_loss"] += closed_trade["pnl"] if closed_trade["pnl"] < 0 else 0
+                
+                # Send Telegram push notification
+                pnl = closed_trade["pnl"]
+                emoji = "🚀 PROFIT" if pnl > 0 else "🩸 LOSS"
+                alert_msg = (
+                    f"🛑 <b>POSITION CLOSED</b>\n\n"
+                    f"<b>Stock:</b> {ticker}\n"
+                    f"<b>Exit Price:</b> ₹{exit_price}\n"
+                    f"<b>Reason:</b> {reason}\n"
+                    f"<b>P&L:</b> {emoji} (₹{pnl:,.2f})\n\n"
+                    f"🤖 <i>AlphaV-7 Autonomous</i>"
+                )
+                send_telegram_alert(alert_msg)
                 
                 return closed_trade
         return None
