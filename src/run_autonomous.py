@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """
-Autonomous Orchestrator — run_autonomous.py
-===========================================
-• Runs Dual-Brain (Groq + Claude) scan on 20 NSE stocks every hour
-• Sends hourly P&L report to Telegram (independent of scan timing)
-• Rate-limit safe: 30s sleep between stocks (~100 Groq calls/scan << 1000 RPD limit)
+run_autonomous.py — Master Orchestrator
+========================================
+PIPELINE EVERY HOUR:
+  Phase 0: StockScreener scans 500+ NSE stocks → picks top 10
+  Phase 1: BigPlayerMonitor checks FII/DII + block deals (every 30 min)
+  Phase 2: DualBrainOrchestrator runs Groq + Claude on the top 10
+  Phase 3: Hourly P&L report to Telegram
 """
 
 import os
@@ -15,53 +17,61 @@ from pathlib import Path
 from loguru import logger
 from datetime import datetime, date
 
-# ── Ensure src/ is on path whether run via CLI or Gunicorn ──────────────────
 sys.path.insert(0, str(Path(__file__).parent))
 
 from dotenv import load_dotenv
-load_dotenv(override=True)   # Load .env first so all os.getenv calls work
+load_dotenv(override=True)
 
 from dual_brain import DualBrainOrchestrator
+from stock_screener import StockScreener
+from big_player_monitor import BigPlayerMonitor
 from data_ingestion.market_data import MarketData
 from data_ingestion.news_sentiment import NewsSentiment
 from notifications import send_telegram_alert, send_hourly_pnl_report, verify_telegram_connection
 
-# ── Top 20 most liquid NSE stocks (Nifty 100 subset) ─────────────────────────
-# Kept at 20 to stay within Groq free-tier: 1,000 RPD for llama-3.3-70b
-WATCHLIST = [
-    "RELIANCE",   "TCS",       "HDFCBANK",  "INFY",      "ICICIBANK",
-    "HINDUNILVR", "ITC",       "SBIN",      "BHARTIARTL","KOTAKBANK",
-    "LT",         "BAJFINANCE","AXISBANK",  "MARUTI",    "SUNPHARMA",
-    "TITAN",      "WIPRO",     "HCLTECH",   "TATAMOTORS","ADANIPORTS",
-]
-
 # ── Shared in-memory portfolio state ─────────────────────────────────────────
-# This persists for the lifetime of the process (resets on Render restart)
 TRADING_STATE = {
-    "capital":          100_000_000,   # ₹10 crore simulated capital
-    "risk_per_trade":       500_000,   # 0.5% per trade
+    "capital":          100_000_000,
+    "risk_per_trade":       500_000,
     "daily_loss":                 0,
     "trades_today":               0,
     "open_positions":            [],
     "closed_trades":             [],
-    "last_reset_date":  str(date.today())
+    "last_reset_date":  str(date.today()),
+    "last_scan_at":            None,
+    "last_screen_result":      None,
 }
 
+# Singletons (created once, reused)
+_screener      = None
+_big_player    = None
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _get_screener() -> StockScreener:
+    global _screener
+    if _screener is None:
+        _screener = StockScreener()
+    return _screener
+
+
+def _get_big_player() -> BigPlayerMonitor:
+    global _big_player
+    if _big_player is None:
+        _big_player = BigPlayerMonitor()
+    return _big_player
+
 
 def _reset_daily_counters_if_new_day():
-    """Reset daily loss/trade counters on a new calendar day."""
     today = str(date.today())
     if TRADING_STATE["last_reset_date"] != today:
-        logger.info(f"📅 New day detected ({today}) — resetting daily counters.")
-        TRADING_STATE["daily_loss"]       = 0
-        TRADING_STATE["trades_today"]     = 0
-        TRADING_STATE["last_reset_date"]  = today
+        logger.info(f"📅 New day ({today}) — resetting daily counters.")
+        TRADING_STATE["daily_loss"]      = 0
+        TRADING_STATE["trades_today"]    = 0
+        TRADING_STATE["last_reset_date"] = today
 
 
+# ── Tool dispatcher ───────────────────────────────────────────────────────────
 def call_function(name: str, args: dict) -> dict:
-    """Route a Groq tool call to the correct data_ingestion function."""
     try:
         if name == "get_company_fundamentals":
             return MarketData.get_company_fundamentals(args["ticker"])
@@ -78,9 +88,9 @@ def call_function(name: str, args: dict) -> dict:
         return {"error": str(e)}
 
 
+# ── Trade executor ────────────────────────────────────────────────────────────
 def execute_trade(ticker: str, action: str, quantity: int,
                   entry_price: float, stop_loss: float, target: float) -> dict:
-    """Paper-trade executor — logs trade and sends Telegram alert."""
     risk   = abs(entry_price - stop_loss) * quantity
     reward = abs(target - entry_price)    * quantity
 
@@ -95,14 +105,13 @@ def execute_trade(ticker: str, action: str, quantity: int,
         "risk":        round(risk, 2),
         "reward":      round(reward, 2),
         "rr_ratio":    round(reward / risk, 2) if risk > 0 else 0,
-        "pnl":         0.0   # Updated when position is closed
+        "pnl":         0.0,
     }
 
     TRADING_STATE["open_positions"].append(trade)
     TRADING_STATE["trades_today"]  += 1
 
     color = "🟢" if action.upper() == "BUY" else "🔴"
-    rr    = trade["rr_ratio"]
     msg   = (
         f"{color} <b>DUAL-BRAIN TRADE SIGNAL</b>\n"
         f"━━━━━━━━━━━━━━━━━━━━━\n"
@@ -112,45 +121,88 @@ def execute_trade(ticker: str, action: str, quantity: int,
         f"<b>Entry:</b>      ₹{entry_price:,.2f}\n"
         f"<b>Stop Loss:</b>  ₹{stop_loss:,.2f}\n"
         f"<b>Target:</b>     ₹{target:,.2f}\n"
-        f"<b>R:R Ratio:</b>  {rr:.1f}x\n"
+        f"<b>R:R Ratio:</b>  {trade['rr_ratio']:.1f}x\n"
         f"<b>Risk:</b>       ₹{risk:,.0f}\n\n"
         f"🤖 <i>Groq (Analyst) + Claude (Strategist) consensus</i>"
     )
     send_telegram_alert(msg)
-    logger.info(f"✅ Trade executed: {ticker} {action} {quantity}@₹{entry_price}")
+    logger.info(f"✅ Trade: {ticker} {action} {quantity}@₹{entry_price}")
     return trade
 
 
-# ── Hourly P&L Report ─────────────────────────────────────────────────────────
-
+# ── Hourly P&L report ─────────────────────────────────────────────────────────
 def hourly_pnl_report():
-    """Called by scheduler every hour — sends P&L summary to Telegram."""
-    logger.info("📊 Sending hourly P&L report to Telegram...")
+    logger.info("📊 Sending hourly P&L report...")
     send_hourly_pnl_report(TRADING_STATE)
 
 
-# ── Main Scan ─────────────────────────────────────────────────────────────────
+# ── Big player check (every 30 min) ──────────────────────────────────────────
+def big_player_check():
+    try:
+        bp = _get_big_player()
+        bp.run_all_checks()
+    except Exception as e:
+        logger.error(f"BigPlayerMonitor error: {e}")
 
+
+# ── MAIN SCAN ─────────────────────────────────────────────────────────────────
 def autonomous_scan():
     """
-    Full dual-brain scan of all watchlist stocks.
-    Called on boot and then every hour by the scheduler.
+    Full pipeline:
+      1. Screen 500+ stocks → pick top 10
+      2. Run Dual-Brain on each of the 10
+      3. Send scan summary to Telegram
     """
     _reset_daily_counters_if_new_day()
+    TRADING_STATE["last_scan_at"] = datetime.now().isoformat()
 
     now = datetime.now().strftime("%Y-%m-%d %H:%M IST")
     logger.info("=" * 70)
-    logger.info(f"🚀 Dual-Brain Scan | {len(WATCHLIST)} stocks | {now}")
+    logger.info(f"🚀 AlphaV-7 Dual-Brain Scan | {now}")
     logger.info("=" * 70)
 
+    # ── Phase 0: Smart Stock Screening ───────────────────────────────────────
     send_telegram_alert(
-        f"🧠 <b>Dual-Brain Scan Starting</b>\n"
-        f"━━━━━━━━━━━━━━━━━━━━━\n"
-        f"Stocks: {len(WATCHLIST)} | Time: {now}\n"
-        f"Models: Groq (llama-3.3-70b) + Claude (haiku-3-5)"
+        f"🔭 <b>Smart Screener Running</b>\n"
+        f"Scanning 500+ NSE stocks to find top 10...\n"
+        f"⏱️ {now}"
     )
 
-    # Initialise the dual-brain
+    try:
+        screener       = _get_screener()
+        screen_results = screener.get_best_opportunities(top_n=10)
+        top_stocks     = screen_results["top_stocks"]
+        fii_dii        = screen_results.get("fii_dii", {})
+        block_deals    = screen_results.get("block_deals", [])
+
+        TRADING_STATE["last_screen_result"] = screen_results
+
+        tickers_chosen = [s["ticker"] for s in top_stocks]
+        fii_emoji = "🟢" if fii_dii.get("fii_sentiment") == "BULLISH" else "🔴"
+
+        # Announce top stocks selection
+        stock_lines = "\n".join(
+            f"  {i}. <b>{s['ticker']}</b> — {s['reason']}"
+            for i, s in enumerate(top_stocks, 1)
+        )
+        send_telegram_alert(
+            f"🏆 <b>Top 10 Selected for Analysis</b>\n"
+            f"━━━━━━━━━━━━━━━━━━━━━\n"
+            f"{stock_lines}\n\n"
+            f"{fii_emoji} FII Today: {fii_dii.get('fii_sentiment','N/A')} | "
+            f"DII: {fii_dii.get('dii_sentiment','N/A')}\n"
+            f"🏛️ Block deals ≥₹10Cr: {len(block_deals)}"
+        )
+
+    except Exception as e:
+        logger.error(f"Screener failed: {e} — using fallback watchlist")
+        tickers_chosen = [
+            "RELIANCE","TCS","HDFCBANK","INFY","ICICIBANK",
+            "SBIN","BHARTIARTL","LT","BAJFINANCE","AXISBANK"
+        ]
+        send_telegram_alert(f"⚠️ Screener error — using fallback 10 stocks\n{e}")
+
+    # ── Phase 1: Dual-Brain analysis on each selected stock ──────────────────
     try:
         brain = DualBrainOrchestrator(
             call_function_fn=call_function,
@@ -158,101 +210,79 @@ def autonomous_scan():
             trading_state=TRADING_STATE
         )
     except ValueError as e:
-        logger.error(f"❌ Cannot start: {e}")
-        send_telegram_alert(f"❌ <b>Scan Aborted</b>\n{e}")
+        logger.error(f"Cannot start dual-brain: {e}")
+        send_telegram_alert(f"❌ <b>Dual-Brain Failed to Start</b>\n{e}")
         return
 
-    scan_results   = []
-    signals_found  = 0
-    errors_found   = 0
+    scan_results  = []
+    signals_found = 0
 
-    for i, ticker in enumerate(WATCHLIST, 1):
-        logger.info(f"[{i:02d}/{len(WATCHLIST)}] Analysing {ticker}...")
+    for i, ticker in enumerate(tickers_chosen, 1):
+        logger.info(f"[{i:02d}/{len(tickers_chosen)}] 🧠 Analysing {ticker}...")
 
-        # Hard stop: daily loss limit
         if abs(TRADING_STATE["daily_loss"]) >= 2_500_000:
-            logger.warning("🛑 Daily loss limit hit — halting scan.")
-            send_telegram_alert("🛑 <b>Daily Loss Limit Hit</b>\nScan halted.")
+            send_telegram_alert("🛑 <b>Daily Loss Limit Hit</b> — scan halted.")
             break
-
-        # Hard stop: max trades
         if TRADING_STATE["trades_today"] >= 50:
-            logger.warning("🛑 Max daily trades (50) reached — halting scan.")
             break
 
         result = brain.analyze_stock(ticker)
         scan_results.append(result)
-
         if result.get("trade_executed"):
             signals_found += 1
-        if result.get("error"):
-            errors_found  += 1
 
-        # Sleep between stocks to respect rate limits
-        # Groq free tier: 1,000 RPD → ~100 calls per scan → 30s sleep is safe
-        if i < len(WATCHLIST):
-            logger.info(f"  ⏳ Rate-limit sleep 30s...")
-            time.sleep(30)
+        # 45s sleep between stocks to respect both Groq (1000 RPD) and Claude limits
+        if i < len(tickers_chosen):
+            logger.info(f"  ⏳ Rate-limit sleep 45s...")
+            time.sleep(45)
 
-    # ── Post-scan summary ────────────────────────────────────────────────────
+    # ── Phase 2: Scan summary ─────────────────────────────────────────────────
     total_pnl = sum(t.get("pnl", 0) for t in TRADING_STATE["closed_trades"])
-    summary   = (
-        f"✅ <b>Dual-Brain Scan Complete</b>\n"
+    send_telegram_alert(
+        f"✅ <b>Scan Complete</b>\n"
         f"━━━━━━━━━━━━━━━━━━━━━\n"
-        f"<b>Stocks Scanned:</b>    {len(scan_results)}/{len(WATCHLIST)}\n"
-        f"<b>Signals Executed:</b>  {signals_found}\n"
-        f"<b>Errors:</b>            {errors_found}\n"
-        f"<b>Trades Today:</b>      {TRADING_STATE['trades_today']}/50\n"
-        f"<b>Open Positions:</b>    {len(TRADING_STATE['open_positions'])}\n"
-        f"<b>Realized P&amp;L:</b>      ₹{total_pnl:+,.2f}\n"
-        f"<b>Finished:</b>          {datetime.now().strftime('%H:%M IST')}\n\n"
-        f"🤖 <i>Next scan in 1 hour</i>"
+        f"<b>Stocks Analysed:</b>  {len(scan_results)}/10\n"
+        f"<b>Signals Fired:</b>    {signals_found}\n"
+        f"<b>Open Positions:</b>   {len(TRADING_STATE['open_positions'])}\n"
+        f"<b>Realized P&amp;L:</b>     ₹{total_pnl:+,.0f}\n"
+        f"<b>Trades Today:</b>     {TRADING_STATE['trades_today']}/50\n"
+        f"🤖 <i>Next scan in ~1 hour</i>"
     )
-    logger.info(summary.replace("<b>", "").replace("</b>", "").replace("<i>", "").replace("</i>", ""))
-    send_telegram_alert(summary)
 
-    # Save scan log for debugging
+    # Save log
     try:
         log_path = Path(__file__).parent.parent / "logs" / "last_scan.json"
         log_path.parent.mkdir(exist_ok=True)
         with open(log_path, "w") as f:
             json.dump(scan_results, f, indent=2, default=str)
-        logger.info(f"📄 Scan log saved: {log_path}")
     except Exception as e:
         logger.warning(f"Could not save scan log: {e}")
 
 
-# ── CLI entry (when not using Gunicorn) ──────────────────────────────────────
-
+# ── CLI entry ─────────────────────────────────────────────────────────────────
 def main():
-    """Standalone CLI runner — used for local testing."""
     import schedule
 
     log_path = Path(__file__).parent.parent / "logs" / "autonomous.log"
     log_path.parent.mkdir(exist_ok=True)
     logger.add(str(log_path), rotation="100 MB", retention="7 days")
 
-    logger.info("🏦 AlphaV-7 Dual-Brain — CLI mode starting")
-
-    # Verify Telegram on startup
+    logger.info("🏦 AlphaV-7 — CLI mode")
     verify_telegram_connection()
-
-    # First scan immediately
     autonomous_scan()
 
-    # Schedule hourly scan + hourly P&L
     schedule.every(1).hours.do(autonomous_scan)
     schedule.every(1).hours.do(hourly_pnl_report)
+    schedule.every(30).minutes.do(big_player_check)
 
     while True:
         try:
             schedule.run_pending()
             time.sleep(60)
         except KeyboardInterrupt:
-            logger.info("Shutdown requested — bye.")
             break
         except Exception as e:
-            logger.error(f"Scheduler error: {e}")
+            logger.error(f"Scheduler: {e}")
             time.sleep(60)
 
 
