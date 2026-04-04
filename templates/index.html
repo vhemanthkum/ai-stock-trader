@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AlphaV-7 Trading Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="dashboard-container">
+        <!-- Header -->
+        <header class="glass-panel main-header">
+            <div class="logo">
+                <span class="pulse-dot"></span>
+                <h1>AlphaV-7 <span class="accent-blue">Dual-Brain Engine</span></h1>
+            </div>
+            
+            <div class="global-stats">
+                <div class="stat-box">
+                    <span class="label">STATUS</span>
+                    <span class="val accent-green" id="dash-status">LIVE</span>
+                </div>
+                <div class="stat-box">
+                    <span class="label">CURRENT ACTIVITY</span>
+                    <span class="val accent-blue" id="dash-activity">Polling server...</span>
+                </div>
+                <div class="stat-box">
+                    <span class="label">CAPITAL</span>
+                    <span class="val" id="dash-capital">₹--</span>
+                </div>
+                <div class="stat-box">
+                    <span class="label">REALIZED P&L</span>
+                    <span class="val" id="dash-pnl">₹--</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Grid -->
+        <main class="dashboard-grid">
+            
+            <!-- Left Column: Neural Terminal -->
+            <section class="glass-panel col-terminal">
+                <div class="panel-header">
+                    <h2>Live Neural Terminal <span class="accent-green blink">_</span></h2>
+                </div>
+                <div class="terminal-body" id="terminal-content">
+                    <!-- Logs injected here -->
+                    <div class="log-line text-dim">Attempting to establish connection with AlphaV-7 core...</div>
+                </div>
+            </section>
+
+            <!-- Middle Column: Dual Brain Details -->
+            <section class="glass-panel col-brain">
+                <div class="panel-header">
+                    <h2>Deep Analysis Output <span class="accent-blue">v1.2</span></h2>
+                </div>
+                <div class="brain-body" id="brain-content">
+                    <div class="empty-state">Waiting for next stock scan payload...</div>
+                </div>
+            </section>
+
+            <!-- Right Column: Watchlist & Pos -->
+            <section class="glass-panel col-screener">
+                <div class="panel-header">
+                    <h2>Active Screener & Pos</h2>
+                </div>
+                <div class="screener-body" >
+                    <h3>Phase 0: Top 10 Opportunities</h3>
+                    <div id="screener-list" class="scroller-y">
+                        <div class="empty-state">No screener data in state yet.</div>
+                    </div>
+
+                    <h3 class="mt-4">Open Neural Positions</h3>
+                    <div id="positions-list" class="scroller-y">
+                        <div class="empty-state">No open positions.</div>
+                    </div>
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+    <!-- The actual polling logic -->
+    <script src="/static/dashboard.js"></script>
+</body>
+</html>

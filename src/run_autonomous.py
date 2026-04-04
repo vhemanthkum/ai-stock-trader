@@ -40,6 +40,7 @@ TRADING_STATE = {
     "last_reset_date":  str(date.today()),
     "last_scan_at":            None,
     "last_screen_result":      None,
+    "current_action":          "Idle — Waiting for next schedule",
 }
 
 # Singletons (created once, reused)
@@ -167,6 +168,8 @@ def autonomous_scan():
         f"Scanning 500+ NSE stocks to find top 10...\n"
         f"⏱️ {now}"
     )
+    
+    TRADING_STATE["current_action"] = "Screener is scanning 500+ NSE stocks..."
 
     try:
         screener       = _get_screener()
@@ -193,6 +196,7 @@ def autonomous_scan():
             f"DII: {fii_dii.get('dii_sentiment','N/A')}\n"
             f"🏛️ Block deals ≥₹10Cr: {len(block_deals)}"
         )
+        TRADING_STATE["current_action"] = "Screener completed. Found top 10 stocks. Initializing Dual-Brain..."
 
     except Exception as e:
         logger.error(f"Screener failed: {e} — using fallback watchlist")
@@ -218,6 +222,7 @@ def autonomous_scan():
     signals_found = 0
 
     for i, ticker in enumerate(tickers_chosen, 1):
+        TRADING_STATE["current_action"] = f"Dual-Brain Phase: Analyzing {ticker} ({i}/10)..."
         logger.info(f"[{i:02d}/{len(tickers_chosen)}] 🧠 Analysing {ticker}...")
 
         if abs(TRADING_STATE["daily_loss"]) >= 2_500_000:
@@ -233,10 +238,12 @@ def autonomous_scan():
 
         # 45s sleep between stocks to respect both Groq (1000 RPD) and Claude limits
         if i < len(tickers_chosen):
+            TRADING_STATE["current_action"] = f"Rate-limit pause: Waiting 45s before next stock..."
             logger.info(f"  ⏳ Rate-limit sleep 45s...")
             time.sleep(45)
 
     # ── Phase 2: Scan summary ─────────────────────────────────────────────────
+    TRADING_STATE["current_action"] = "Idle — Last scan complete."
     total_pnl = sum(t.get("pnl", 0) for t in TRADING_STATE["closed_trades"])
     send_telegram_alert(
         f"✅ <b>Scan Complete</b>\n"

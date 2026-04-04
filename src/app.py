@@ -11,8 +11,9 @@ import sys
 import time
 import threading
 import schedule
+from functools import wraps
 from pathlib import Path
-from flask import Flask, jsonify
+from flask import Flask, jsonify, render_template, request, Response
 from loguru import logger
 
 # ── Critical: add src/ to path BEFORE any local imports ─────────────────────
@@ -27,7 +28,27 @@ from run_autonomous import autonomous_scan, hourly_pnl_report, TRADING_STATE
 from notifications import verify_telegram_connection, send_telegram_alert
 
 # ── Flask app ────────────────────────────────────────────────────────────────
-app = Flask(__name__)
+app = Flask(__name__, template_folder="../templates", static_folder="../static")
+
+# ── Authentication ───────────────────────────────────────────────────────────
+def check_auth(username, password):
+    expected_pass = os.getenv("DASHBOARD_PASSWORD", "alpha2026")
+    return username == 'admin' and password == expected_pass
+
+def authenticate():
+    return Response(
+        'Could not verify your access level for that URL.\n'
+        'You have to login with proper credentials', 401,
+        {'WWW-Authenticate': 'Basic realm="Login Required"'})
+
+def requires_auth(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        auth = request.authorization
+        if not auth or not check_auth(auth.username, auth.password):
+            return authenticate()
+        return f(*args, **kwargs)
+    return decorated
 
 
 # ── Routes ───────────────────────────────────────────────────────────────────
@@ -48,12 +69,14 @@ def status():
     total_pnl = sum(t.get("pnl", 0) for t in TRADING_STATE["closed_trades"])
     return jsonify({
         "status":          "running",
+        "current_action":  TRADING_STATE.get("current_action", "Idle"),
         "capital":         TRADING_STATE["capital"],
         "daily_loss":      TRADING_STATE["daily_loss"],
         "realized_pnl":    round(total_pnl, 2),
         "trades_today":    TRADING_STATE["trades_today"],
         "open_positions":  len(TRADING_STATE["open_positions"]),
         "closed_trades":   len(TRADING_STATE["closed_trades"]),
+        "last_screen_result": TRADING_STATE.get("last_screen_result")
     })
 
 
@@ -74,6 +97,45 @@ def pnl_report():
     """Trigger a manual P&L report to Telegram."""
     hourly_pnl_report()
     return jsonify({"status": "P&L report sent to Telegram"}), 200
+
+
+@app.route("/dashboard")
+@requires_auth
+def dashboard():
+    """Renders the main frontend UI."""
+    return render_template("index.html")
+
+
+@app.route("/api/logs")
+@requires_auth
+def api_logs():
+    """Returns the last 150 lines of the agent log."""
+    log_file = Path(__file__).parent.parent / "logs" / "autonomous.log"
+    logs = []
+    if log_file.exists():
+        try:
+            with open(log_file, "r", encoding="utf-8") as f:
+                lines = f.readlines()
+                logs = lines[-150:]  # get last 150 lines
+        except Exception:
+            pass
+    return jsonify({"logs": logs})
+
+
+@app.route("/api/brain")
+@requires_auth
+def api_brain():
+    """Returns the last scan JSON data."""
+    log_file = Path(__file__).parent.parent / "logs" / "last_scan.json"
+    data = []
+    if log_file.exists():
+        try:
+            import json
+            with open(log_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception:
+            pass
+    return jsonify({"latest_scan": data})
 
 
 # ── Background worker ─────────────────────────────────────────────────────────
