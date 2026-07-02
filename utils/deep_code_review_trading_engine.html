@@ -1,0 +1,715 @@
+
+<h2 class="sr-only">Deep code review of the Indian Stock AI Council — specific bugs, data problems, and the upgraded screener implementation</h2>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+.w{padding:1.5rem 0;font-family:var(--font-sans)}
+nav{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:1.5rem}
+button.t{background:transparent;border:0.5px solid var(--border-strong);color:var(--text-secondary);padding:6px 13px;border-radius:var(--radius);font-size:13px;cursor:pointer;font-family:var(--font-sans);transition:all .15s}
+button.t:hover{background:var(--surface-1);color:var(--text-primary)}
+button.t.on{background:var(--bg-accent);border-color:var(--border-accent);color:var(--text-accent);font-weight:500}
+.pg{display:none}.pg.on{display:block}
+h2{font-size:18px;font-weight:500;margin-bottom:4px}
+h3{font-size:15px;font-weight:500;margin-bottom:7px}
+h4{font-size:14px;font-weight:500;margin-bottom:4px}
+p{font-size:14px;color:var(--text-secondary);line-height:1.7;margin-bottom:10px}
+.sub{font-size:13px;color:var(--text-muted);margin-bottom:1.5rem}
+.card{background:var(--surface-1);border:0.5px solid var(--border);border-radius:12px;padding:1rem 1.25rem;margin-bottom:10px}
+.cd{border-color:var(--border-danger);background:var(--bg-danger)}
+.cw{border-color:var(--border-warning);background:var(--bg-warning)}
+.cs{border-color:var(--border-success);background:var(--bg-success)}
+.ca{border-color:var(--border-accent);background:var(--bg-accent)}
+.tag{display:inline-flex;align-items:center;font-size:12px;font-weight:500;padding:3px 9px;border-radius:999px;margin-bottom:7px}
+.td{background:var(--bg-danger);color:var(--text-danger);border:0.5px solid var(--border-danger)}
+.tw{background:var(--bg-warning);color:var(--text-warning);border:0.5px solid var(--border-warning)}
+.ts{background:var(--bg-success);color:var(--text-success);border:0.5px solid var(--border-success)}
+.ta{background:var(--bg-accent);color:var(--text-accent);border:0.5px solid var(--border-accent)}
+pre{font-family:var(--font-mono);font-size:12px;background:var(--surface-1);border:0.5px solid var(--border);border-radius:var(--radius);padding:12px;overflow-x:auto;margin-bottom:10px;line-height:1.6;color:var(--text-secondary)}
+.bad{background:var(--bg-danger);border-color:var(--border-danger)}
+.good{background:var(--bg-success);border-color:var(--border-success)}
+code{font-family:var(--font-mono);font-size:12px;background:var(--surface-1);border:0.5px solid var(--border);padding:1px 5px;border-radius:3px;color:var(--text-accent)}
+table{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:10px}
+th{text-align:left;padding:7px 10px;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);border-bottom:0.5px solid var(--border-strong);font-weight:500}
+td{padding:8px 10px;border-bottom:0.5px solid var(--border);color:var(--text-secondary);vertical-align:top}
+tr:last-child td{border-bottom:none}
+.pos{color:var(--text-success)}.neg{color:var(--text-danger)}.wrn{color:var(--text-warning)}.acc{color:var(--text-accent)}
+hr{border:none;border-top:0.5px solid var(--border);margin:1rem 0}
+.lnum{color:var(--text-muted);margin-right:8px;font-family:var(--font-mono);font-size:11px}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
+</style>
+
+<div class="w">
+<nav>
+  <button class="t on" onclick="show('screener')">Screener bugs</button>
+  <button class="t" onclick="show('nse')">NSE scraper bugs</button>
+  <button class="t" onclick="show('yf')">yfinance bugs</button>
+  <button class="t" onclick="show('sector')">Sector data</button>
+  <button class="t" onclick="show('fix')">Fixed screener code</button>
+  <button class="t" onclick="show('apis')">API failover fix</button>
+</nav>
+
+<!-- SCREENER BUGS -->
+<div id="pg-screener" class="pg on">
+  <h2>stock_screener.py — specific bugs found</h2>
+  <p class="sub">I read every line. These are actual problems in your code, not general advice.</p>
+
+  <div class="card cd">
+    <div class="tag td">Bug — line 119: MultiIndex check is wrong</div>
+    <pre class="bad">
+# YOUR CODE (line 119):
+if len(data.columns.levels[0]) > 1:  # MultiIndex check
+    close  = data["Close"][yf_ticker].dropna()
+
+# THE PROBLEM:
+# data.columns.levels[0] raises AttributeError when yf.download()
+# returns a flat Index (happens when only 1 ticker in the batch,
+# or when all but 1 tickers fail). Your except: pass on line 128
+# silently swallows this and returns score=0 for the stock.
+# This means stocks at the start or end of batches where only
+# a few succeed get silently dropped.</pre>
+    <pre class="good">
+# FIX:
+if isinstance(data.columns, pd.MultiIndex):
+    close  = data["Close"][yf_ticker].dropna()
+    volume = data["Volume"][yf_ticker].dropna()
+else:
+    close  = data["Close"].dropna()
+    volume = data["Volume"].dropna()</pre>
+    <p>Note: <code>yfinance_collector.py</code> already does this correctly with <code>isinstance(df.columns, pd.MultiIndex)</code>. The screener has a different (broken) check.</p>
+  </div>
+
+  <div class="card cd">
+    <div class="tag td">Bug — line 100: score > 0 filter silently drops neutral stocks</div>
+    <pre class="bad">
+# YOUR CODE (line 100):
+if score > 0:
+    results.append({...})
+
+# THE PROBLEM:
+# A fundamentally sound stock that is consolidating (no volume surge,
+# no price move) will score exactly 0 or slightly negative and get
+# dropped. But consolidation before breakout is often the BEST setup.
+# A stock above SMA-20 (+20), above SMA-5 (+10) but with low volume
+# (-15) = +15 total. That passes. But if volume is normal (no bonus,
+# no penalty) and price is flat: +20 +10 = 30. Fine.
+# Real problem: stock BELOW sma20 loses -10, below sma5 loses -20
+# = -30. These are trend-reversal candidates your screener eliminates
+# before fundamentals are even checked.</pre>
+    <pre class="good">
+# FIX: Lower threshold to allow ALL stocks with score >= -10
+# (those in mild downtrend but with other signals) through.
+# The hard elimination gates (see fix tab) will handle real rejects.
+if score >= -10:
+    results.append({...})</pre>
+  </div>
+
+  <div class="card cw">
+    <div class="tag tw">Problem — line 211: ₹10 Cr block deal threshold is in wrong unit</div>
+    <pre class="bad">
+# YOUR CODE (line 211):
+if (qty * price) >= 10_00_00_000:  # ₹10 Cr
+
+# qty from NSE API is in shares
+# price from "BD_TP_WATP" is in ₹ per share
+# So qty * price = total value in ₹
+# 10_00_00_000 = ₹10,00,00,000 = ₹10 Cr ✓ — this is CORRECT.
+# BUT: the field name used is "BD_TP_WATP" which I cannot verify
+# is the correct field name in NSE's current bulk deal API response.
+# Worth verifying the exact JSON field names from a live API call.
+# If the field is missing, float("0") = 0.0, so the check silently
+# passes every deal through as 0 * 0 = 0, which is < 10 Cr, so
+# nothing gets added. Silent failure.</pre>
+    <pre class="good">
+# FIX: Add logging when fields are missing
+qty = int(str(row.get("BD_QTY_TRD", "0")).replace(",", "") or 0)
+price_str = row.get("BD_TP_WATP", row.get("PRICE", "0"))  # try alternate key
+price = float(str(price_str).replace(",", "") or 0)
+if qty == 0 or price == 0:
+    logger.debug(f"Block deal row missing qty/price: {row.keys()}")
+    continue
+if (qty * price) >= 10_00_00_000:</pre>
+  </div>
+
+  <div class="card cw">
+    <div class="tag tw">Problem — line 225–232: Google News ticker matching is extremely noisy</div>
+    <pre class="bad">
+# YOUR CODE (lines 225–232):
+for ticker in self.universe:
+    base_ticker = ticker.replace(".NS", "")
+    if base_ticker in title:
+
+# THE PROBLEM:
+# "LT" will match in "LATEST", "PLANT", "DELTA", "FLUTTER" etc.
+# "ITC" will match in "NOTICE", "JUSTICE", "PRACTICE".
+# "TCS" will match in "OPTICS", "CONTACTS", "TACTICS".
+# This gives false positives to common 2-3 letter tickers.
+# The +15 score bonus for a false news match can push a mediocre
+# stock above better candidates.</pre>
+    <pre class="good">
+# FIX: Use word-boundary matching and common name lookup
+import re
+NAME_MAP = {"LT": ["larsen", "l&t"], "ITC": [" itc "], "TCS": [" tcs "]}
+
+def ticker_in_title(base_ticker, title_lower):
+    # Try word boundary for short tickers
+    if len(base_ticker) <= 3:
+        names = NAME_MAP.get(base_ticker, [base_ticker.lower()])
+        return any(n in title_lower for n in names)
+    return base_ticker.lower() in title_lower</pre>
+  </div>
+
+  <div class="card cw">
+    <div class="tag tw">Problem — line 241: screen(top_n=top_n * 2) logic is fragile</div>
+    <pre class="bad">
+# YOUR CODE (line 241):
+top_stocks = self.screen(top_n=top_n * 2)  # Get double, then boost
+
+# If top_n=15, this fetches top 30 from scoring.
+# Then block/news overlays re-score and re-sort.
+# But if only 20 stocks survive scoring (score > 0), you pass
+# 20 into the boost loop. The final slice [:top_n] still works.
+# NOT a crash bug, but: the "double then boost" pattern means
+# stocks ranked 16-30 by pure math never get block/news overlay
+# applied, even if a rank-25 stock had a massive block deal today.
+# The overlay should be applied BEFORE the first sort+slice.</pre>
+    <pre class="good">
+# FIX: Apply overlays to ALL scored stocks, then sort once at end
+top_stocks = self.screen(top_n=len(self.universe))  # all survivors
+# ... apply overlays to all ...
+top_stocks.sort(key=lambda x: x["score"], reverse=True)
+final = top_stocks[:top_n]</pre>
+    <p>I am not certain this causes you to miss good stocks in practice, but it is a logical ordering error. Worth verifying with your own data.</p>
+  </div>
+
+  <div class="card cd">
+    <div class="tag td">Critical: no hard elimination gates before scoring</div>
+    <p>As discussed previously, your screener has <strong>zero hard gates</strong>. A stock with: market cap ₹10 Cr, promoter pledged 90%, zero operating cash flow, in the F&O ban list — will be scored and potentially passed to the council if it has a volume surge today. The scoring matrix has no ability to filter these out because scoring treats all stocks equally and only ranks, never eliminates. This is the root of why AI agents sometimes receive garbage inputs. See the "Fixed screener code" tab for the gate implementation.</p>
+  </div>
+</div>
+
+<!-- NSE SCRAPER BUGS -->
+<div id="pg-nse" class="pg">
+  <h2>nse_scraper.py — specific problems found</h2>
+  <p class="sub">The NSE API is fragile and undocumented. These are real issues.</p>
+
+  <div class="card cd">
+    <div class="tag td">Critical — line 125: fii_3day_net = fii_net * 3 is fabricated data</div>
+    <pre class="bad">
+# YOUR CODE (line 125):
+fii_data["fii_3day_net"] = fii_net * 3
+fii_data["dii_3day_net"] = dii_net * 3
+
+# YOUR OWN COMMENT says: "For 3-day rolling, multiply today by 3 as approximation"
+
+# THIS IS WRONG. Multiplying one day by 3 is NOT a 3-day rolling sum.
+# If today FII bought ₹1000 Cr but yesterday sold ₹2000 Cr and
+# the day before sold ₹500 Cr:
+# Real 3-day net = +1000 - 2000 - 500 = -1500 Cr (BEARISH signal)
+# Your formula = 1000 * 3 = +3000 Cr (BULLISH signal — WRONG direction)
+# This sends the wrong signal to your macro agent and position multiplier.
+# Your config thresholds FII_BULLISH_THRESHOLD=2000 and
+# FII_BEARISH_THRESHOLD=-2000 are being evaluated against fabricated data.</pre>
+    <pre class="good">
+# FIX: Store daily values in SQLite and compute real rolling sum
+# In db.py, add:
+# CREATE TABLE fii_daily (date TEXT PRIMARY KEY, fii_net REAL, dii_net REAL)
+# INSERT OR REPLACE INTO fii_daily VALUES (today, fii_net, dii_net)
+
+# Then query:
+# SELECT SUM(fii_net) FROM fii_daily 
+# WHERE date >= date('now', '-3 days')
+# This gives you a real 3-day rolling net.
+
+# Interim fix if you don't want to add DB logic yet:
+# Just return today's single value and label it correctly:
+fii_data["fii_today"] = fii_net
+fii_data["fii_3day_net"] = fii_net  # honest: only have today
+# At least the direction will be correct.</pre>
+  </div>
+
+  <div class="card cw">
+    <div class="tag tw">Problem — get_mmi_score(): VIX-only MMI is missing 4 components</div>
+    <pre class="bad">
+# YOUR CODE computes MMI from VIX only.
+# Your own comment says: "combine with put/call ratio, breadth, etc."
+# but it never does. The result is passed to:
+#   - Position multiplier (get_position_multiplier)
+#   - Macro gate (should_trade)
+#   - Sentiment label shown in output
+# All three of these are driven by a metric that is essentially
+# just a remapped VIX value with arbitrary breakpoints.
+# VIX 17 → score 60 (your "neutral" threshold).
+# VIX 17.5 → score 45 (your "fear" territory).
+# A 0.5-point VIX change flips your sentiment label.
+# This is not how MMI works — it uses PCR, advance-decline,
+# delivery volume, and other factors. Worth verifying exact
+# MMI methodology from Tickertape's published description.</pre>
+    <pre class="good">
+# Minimum viable multi-factor MMI proxy:
+def get_mmi_score() -> float:
+    vix = get_india_vix()                    # weight: 40%
+    pcr = get_pcr_from_nse()                 # weight: 25% (see note)
+    adv_decline = get_advance_decline()      # weight: 20%
+    nifty_vs_200dma = get_nifty_dma_gap()   # weight: 15%
+
+    # PCR: >1.2 = fear (score low), <0.8 = greed (score high)
+    # A/D ratio: <0.4 = fear, >0.6 = normal
+    # Nifty vs 200DMA: below = fear
+    # Combine with weighted average
+    ...
+
+# NOTE: NSE publishes PCR data. Worth verifying the current
+# endpoint — I cannot confirm the exact URL is stable.</pre>
+  </div>
+
+  <div class="card cw">
+    <div class="tag tw">Problem — line 38–47: NSE session initialized per function call</div>
+    <pre class="bad">
+# In nse_scraper.py, _get_nse_session() is called inside:
+# - get_india_vix() (once)
+# - get_fii_dii_data() (once)
+# - get_bulk_deals() (once)
+# Each creates a NEW session and visits NSE homepage to get cookies.
+# That's 3 homepage visits = 3 extra HTTP requests every run.
+# NSE's bot protection may flag rapid repeated homepage hits
+# from the same IP in seconds. This could be contributing
+# to your NSE API failures.</pre>
+    <pre class="good">
+# FIX: Create session once at module level, reuse it
+_NSE_SESSION = None
+
+def get_nse_session() -> requests.Session:
+    global _NSE_SESSION
+    if _NSE_SESSION is None:
+        _NSE_SESSION = requests.Session()
+        _NSE_SESSION.headers.update(NSE_HEADERS)
+        try:
+            _NSE_SESSION.get(NSE_BASE, timeout=10)
+        except Exception as e:
+            logger.warning(f"NSE session init failed: {e}")
+    return _NSE_SESSION</pre>
+  </div>
+
+  <div class="card cw">
+    <div class="tag tw">Problem — line 118: FII/DII value division by 100 may be wrong</div>
+    <pre class="bad">
+# YOUR CODE (line 118):
+fii_net = round((fii_buy - fii_sell) / 100, 2)  # Convert to ₹ Cr
+
+# The comment says "convert to ₹ Cr" but the NSE API's
+# buyValue/sellValue field units are not documented clearly.
+# If the API already returns values in ₹ Cr, dividing by 100
+# gives you values in hundreds of crores — wildly wrong.
+# If it returns values in ₹ lakhs, dividing by 100 gives crores.
+# If it returns raw ₹, dividing by 100 gives values in ₹ not Cr.
+# I cannot confirm the correct unit without seeing a live API response.
+# Worth printing the raw values in debug mode to verify the unit.</pre>
+    <pre class="good">
+# FIX: Add a sanity check
+fii_net_raw = fii_buy - fii_sell
+logger.debug(f"FII raw buy={fii_buy}, sell={fii_sell}, net={fii_net_raw}")
+# If raw net looks like it's in crores (e.g. 3500.0), don't divide.
+# If it looks like lakhs (e.g. 350000.0), divide by 100.
+# Verify once from a live response before hardcoding the divisor.</pre>
+  </div>
+</div>
+
+<!-- YFINANCE BUGS -->
+<div id="pg-yf" class="pg">
+  <h2>yfinance_collector.py — what's solid and what isn't</h2>
+  <p class="sub">This is your most reliable file. Still has two real issues.</p>
+
+  <div class="card cs">
+    <div class="tag ts">What's solid</div>
+    <p>The RSI and ATR implementations are mathematically correct. The MultiIndex handling (<code>isinstance(df.columns, pd.MultiIndex)</code>) is the right pattern. The 52-week high/low using <code>tail(252)</code> is a reasonable approximation (252 ≈ trading days in a year, though not exact — worth noting). The caching to disk is good practice. The empty data fallback prevents crashes.</p>
+  </div>
+
+  <div class="card cd">
+    <div class="tag td">Bug — line 155: 200-DMA fallback is misleading</div>
+    <pre class="bad">
+# YOUR CODE (line 155):
+dma_200 = round(float(close.rolling(200).mean().iloc[-1]), 2) \
+    if len(close) >= 200 else round(float(close.mean()), 2)
+
+# If len(close) < 200 (e.g. newly listed stock, or OHLCV_PERIOD="6mo"
+# which gives ~126 trading days), you compute close.mean() of ALL
+# available data and store it as "dma_200".
+# This gets passed to agents as if it's a real 200-DMA.
+# A stock listed 3 months ago will have its 3-month average
+# labeled as 200-DMA. The agent then sees "price is above 200-DMA"
+# which is meaningless for a 3-month-old stock.
+# Your OHLCV_PERIOD = "1y" in config — but yfinance sometimes
+# returns fewer days for illiquid stocks.</pre>
+    <pre class="good">
+# FIX: Return None (or 0.0) and flag it explicitly
+has_200dma = len(close) >= 200
+dma_200 = round(float(close.rolling(200).mean().iloc[-1]), 2) \
+    if has_200dma else 0.0
+
+# Add field to StockPriceData schema:
+# has_200dma: bool = False
+
+# In agent prompt, skip 200-DMA analysis if has_200dma is False.
+# Never pass a fake 200-DMA to an LLM — it will reason over it.</pre>
+  </div>
+
+  <div class="card cw">
+    <div class="tag tw">Problem — line 59: ^INDIAVIX ticker reliability</div>
+    <p>The ticker <code>^INDIAVIX</code> on yfinance is not an official NSE source. It relies on Yahoo Finance's data pipeline for Indian indices, which has historically had gaps and delays on VIX specifically. I am not certain whether this is currently reliable — worth testing <code>yf.Ticker("^INDIAVIX").history(period="5d")</code> and checking whether it returns current data or stale/empty results. Your fallback to NSE API is the right call, but the session creation issue in <code>nse_scraper.py</code> (described in the previous tab) means the fallback may also fail.</p>
+  </div>
+
+  <div class="card cw">
+    <div class="tag tw">Problem — screener uses 21d data, collector uses 1y — inconsistency</div>
+    <pre class="bad">
+# stock_screener.py line 83:
+data = yf.download(period="21d", ...)  # screener: 21 days
+
+# yfinance_collector.py uses:
+# OHLCV_PERIOD = "1y"  # collector: 1 year
+
+# THE ISSUE:
+# In screen(), SMA-20 from 21 days = just barely enough (needs 20).
+# If even 1 day is missing (holiday, data gap), SMA-20 is computed
+# from 19 days (close.tail(20) on a 19-day series = all 19 days).
+# The result is silently used as if it were a 20-day SMA.
+# The screener should use at least 30d to safely compute SMA-20.</pre>
+    <pre class="good">
+# FIX in _score_batch:
+data = yf.download(period="30d", ...)  # gives buffer for holidays</pre>
+  </div>
+</div>
+
+<!-- SECTOR DATA -->
+<div id="pg-sector" class="pg">
+  <h2>sector_data.py — what works and one gap</h2>
+  <p class="sub">This is the cleanest file in the project.</p>
+
+  <div class="card cs">
+    <div class="tag ts">What works correctly</div>
+    <p>The relative strength formula <code>(sector_change - nifty_change)</code> is the standard momentum RS calculation and is implemented correctly. The sort by rs_20day descending is correct. The 6-month history window is appropriate for this calculation. The MultiIndex handling is consistent with the rest of the codebase. <code>get_top_sectors()</code> and <code>get_laggard_sectors()</code> are clean utility functions.</p>
+  </div>
+
+  <div class="card cw">
+    <div class="tag tw">Gap: sector RS is computed but not used as a gate in the screener</div>
+    <p>This is the biggest gap in <code>sector_data.py</code>. You compute sector rankings correctly but <code>stock_screener.py</code> never imports or uses them. The screener doesn't know which sector each stock belongs to, and doesn't apply a sector RS multiplier. A stock in a bottom-ranked sector gets the same score boost as a stock in a top sector. The fix requires: (1) mapping each Nifty 500 stock to its sector, (2) fetching sector RS before scoring, (3) multiplying the score by a sector weight. The sector mapping is the hard part — yfinance provides <code>info['sector']</code> but with inconsistent category names that may not match your <code>SECTOR_INDICES</code> names. Worth verifying what <code>yf.Ticker('HDFCBANK.NS').fast_info</code> returns for sector classification.</p>
+  </div>
+
+  <div class="card cw">
+    <div class="tag tw">Minor: calling get_sector_rankings() twice wastes time</div>
+    <pre class="bad">
+# In main.py's collect_data():
+sector_rankings = get_sector_rankings()  # call 1
+
+# Then in run_market_agents():
+sector_result = await sector_agent.analyze(sector_data)  # uses it
+
+# But in get_top_sectors() and get_laggard_sectors():
+def get_top_sectors(n=3):
+    rankings = get_sector_rankings()  # call 2 — fetches yfinance AGAIN
+    return [s.sector_name for s in rankings[:n]]
+
+# If any code calls get_top_sectors() separately,
+# it re-fetches all 8 sector indices. Cache the result.</pre>
+    <pre class="good">
+# FIX: Add module-level cache
+_sector_cache: list | None = None
+_sector_cache_date: str | None = None
+
+def get_sector_rankings() -> list[SectorRSData]:
+    global _sector_cache, _sector_cache_date
+    today = datetime.now().strftime("%Y-%m-%d")
+    if _sector_cache and _sector_cache_date == today:
+        return _sector_cache
+    # ... fetch logic ...
+    _sector_cache = sectors
+    _sector_cache_date = today
+    return sectors</pre>
+  </div>
+</div>
+
+<!-- FIXED SCREENER -->
+<div id="pg-fix" class="pg">
+  <h2>The upgraded screener — drop-in replacement</h2>
+  <p class="sub">This is a complete rewrite of <code>_score_ticker</code> and adds hard gates. Uncertainty note: I cannot verify exact yfinance field names for all fundamental data — marked below where to verify.</p>
+
+  <div class="card">
+    <h3>Stage 1A — hard elimination gates (add to _score_batch)</h3>
+    <pre>
+def _passes_hard_gates(self, info: dict, hist: pd.DataFrame) -> tuple[bool, str]:
+    """
+    Hard boolean gates. Any fail → stock eliminated immediately.
+    Run cheapest checks first to avoid unnecessary computation.
+    
+    UNCERTAINTY NOTE: yfinance field names like 'marketCap',
+    'averageVolume', 'debtToEquity' — verify these exist in
+    yf.Ticker(symbol).fast_info or .info for your version of yfinance.
+    Field names have changed across yfinance versions.
+    """
+    # Gate 1: Price above ₹5 (removes extreme penny stocks)
+    close_prices = hist["Close"].dropna()
+    if close_prices.empty or float(close_prices.iloc[-1]) < 5.0:
+        return False, "price_below_5"
+
+    # Gate 2: Minimum liquidity — 20-day avg volume > 50,000 shares
+    # (₹50 stock × 50K shares = ₹25L minimum daily liquidity)
+    volume = hist["Volume"].dropna()
+    avg_vol = float(volume.tail(20).mean()) if len(volume) >= 5 else 0
+    if avg_vol < 50_000:
+        return False, "illiquid"
+
+    # Gate 3: Sufficient data (newly listed stocks are unreliable)
+    if len(close_prices) < 20:
+        return False, "insufficient_history"
+
+    # Gate 4: Not in catastrophic downtrend
+    # If price is below BOTH SMA-20 AND down >30% in 21 days: skip
+    sma20 = float(close_prices.tail(20).mean())
+    price_21d_ago = float(close_prices.iloc[-21]) if len(close_prices) >= 21 else float(close_prices.iloc[0])
+    drawdown = (float(close_prices.iloc[-1]) - price_21d_ago) / price_21d_ago * 100
+    if float(close_prices.iloc[-1]) < sma20 and drawdown < -25:
+        return False, "catastrophic_downtrend"
+
+    # NOTE: Ideally add promoter pledge and debt gates here.
+    # However, yfinance does not reliably provide these for Indian stocks.
+    # These should be fetched from screener_parser.py fundamentals
+    # and applied as a post-scoring filter, not here in the batch loop.
+    # Worth verifying what info['debtToEquity'] returns for NSE tickers.
+
+    return True, "ok"
+    </pre>
+  </div>
+
+  <div class="card">
+    <h3>Upgraded _score_ticker — institutional weights</h3>
+    <pre>
+def _score_ticker_v2(self, data, yf_ticker: str) -> tuple[float, str]:
+    """
+    Institutional scoring matrix.
+    Returns (score, reason_string).
+    Score range: roughly -60 to +120.
+    Stocks scoring below 15 after gates are weak setups.
+    """
+    score = 0.0
+    reasons = []
+
+    # --- Extract data safely ---
+    try:
+        if isinstance(data.columns, pd.MultiIndex):
+            close  = data["Close"][yf_ticker].dropna()
+            volume = data["Volume"][yf_ticker].dropna()
+            high   = data["High"][yf_ticker].dropna()
+            low    = data["Low"][yf_ticker].dropna()
+        else:
+            close  = data["Close"].dropna()
+            volume = data["Volume"].dropna()
+            high   = data["High"].dropna()
+            low    = data["Low"].dropna()
+        if len(close) < 5:
+            return 0.0, "insufficient_data"
+    except (KeyError, AttributeError):
+        return 0.0, "data_error"
+
+    latest = float(close.iloc[-1])
+    prev   = float(close.iloc[-2]) if len(close) >= 2 else latest
+    pct_chg = ((latest - prev) / prev * 100) if prev > 0 else 0
+
+    # Moving averages (use available data, don't fake 200-DMA)
+    sma5  = float(close.tail(5).mean())
+    sma20 = float(close.tail(20).mean()) if len(close) >= 20 else sma5
+
+    # 52-week high proxy (use all available data in the download window)
+    # NOTE: With 30d download, this is a 30-day high, not 52-week.
+    # The full 52-week high comes from yfinance_collector.py (1y period).
+    # Label it accurately.
+    recent_high = float(close.max())
+    pct_from_high = ((latest - recent_high) / recent_high * 100) if recent_high > 0 else 0
+
+    # Volume
+    today_vol  = float(volume.iloc[-1]) if len(volume) > 0 else 0
+    avg_vol_20 = float(volume.tail(20).mean()) if len(volume) >= 5 else today_vol
+    vol_ratio  = (today_vol / avg_vol_20) if avg_vol_20 > 0 else 1.0
+
+    # === MOMENTUM BLOCK (40% of score weight conceptually) ===
+
+    # 1. Proximity to period high (breakout setup)
+    if pct_from_high >= -2.0:
+        score += 35
+        reasons.append("Near period high")
+    elif pct_from_high >= -5.0:
+        score += 20
+        reasons.append("Close to period high")
+
+    # 2. Trend structure (200-DMA not available in 30d; use SMA-20 as proxy)
+    if latest > sma20:
+        score += 20
+        reasons.append("Above SMA-20")
+    else:
+        score -= 10
+
+    if latest > sma5 and latest > sma20:
+        score += 10
+        reasons.append("Short-term uptrend")
+    elif latest < sma5 and latest < sma20:
+        score -= 20
+        reasons.append("Short-term downtrend")
+
+    # 3. Day's price action
+    if 1.5 <= pct_chg <= 5.0:  # Healthy move, not parabolic
+        score += 15
+        reasons.append(f"Healthy move +{pct_chg:.1f}%")
+    elif pct_chg > 5.0:
+        score += 5   # Parabolic — late entry risk, smaller bonus
+        reasons.append(f"Strong move +{pct_chg:.1f}% (late entry risk)")
+    elif pct_chg < -4.0:
+        score += 10  # Potential bounce, but needs fundamental check
+        reasons.append(f"Oversold drop {pct_chg:.1f}% (bounce candidate)")
+
+    # === VOLUME BLOCK ===
+    # Accumulation zone: 1.2x-2.5x is healthy; >3x often panic/dump
+    if 1.2 <= vol_ratio <= 2.5:
+        score += 25
+        reasons.append(f"Accumulation vol {vol_ratio:.1f}x")
+    elif vol_ratio > 2.5:
+        score += 10  # Spike — could be distribution, less reliable
+        reasons.append(f"Vol spike {vol_ratio:.1f}x (verify direction)")
+    elif vol_ratio < 0.5:
+        score -= 15  # Drying up, no interest
+        reasons.append("Vol drying up")
+
+    return score, " | ".join(reasons) if reasons else "no_signal"
+    </pre>
+    <p class="sub">Note: This replaces <code>_score_ticker</code>. The MultiIndex fix is included. You will need to update the field names in <code>_passes_hard_gates</code> to match your version of yfinance — verify with <code>print(yf.Ticker('RELIANCE.NS').fast_info)</code>.</p>
+  </div>
+</div>
+
+<!-- API FAILOVER -->
+<div id="pg-apis" class="pg">
+  <h2>API failures — the real causes and the real fix</h2>
+  <p class="sub">Based on your code and the rate limit data I verified from search results.</p>
+
+  <div class="card cd">
+    <div class="tag td">Root cause of your 429 failures — flat sleep is not rate limiting</div>
+    <pre class="bad">
+# YOUR CODE (main.py line 350):
+await asyncio.sleep(4.0)
+
+# THIS DOES NOT PREVENT 429s. Here's why:
+# 1. You run 3 agents IN PARALLEL (asyncio.gather) per stock.
+#    Those 3 parallel calls go to Groq simultaneously.
+#    Groq's free limit is 30 RPM. 3 calls × 15 stocks = 45 calls
+#    to Groq minimum. If gather fires them at t=0, t=0, t=0
+#    and the next stock fires at t=4.0, t=4.0, t=4.0:
+#    In minute 1: 45 calls. Groq limit 30/min → 429 on call 31.
+#
+# 2. You have TWO separate places making Groq calls:
+#    - fundamental_agent → Groq (llama-3.3-70b-versatile)
+#    - technical_agent   → Groq (llama-3.1-8b-instant)
+#    - news_agent        → Groq (llama-3.1-8b-instant)
+#    All three in the same asyncio.gather() call.
+#    The 4-second sleep between stocks doesn't help —
+#    the 3 calls per stock already burst before the sleep.</pre>
+    <pre class="good">
+# FIX: Per-provider semaphore with token bucket
+import asyncio
+from collections import deque
+import time
+
+class ProviderRateLimiter:
+    """Token bucket rate limiter per provider."""
+    def __init__(self, rpm: int, rpd: int):
+        self.rpm = rpm
+        self.rpd = rpd
+        self.minute_window: deque = deque()
+        self.day_total = 0
+        self._lock = asyncio.Lock()
+
+    async def acquire(self, provider_name: str):
+        async with self._lock:
+            now = time.monotonic()
+            # Evict entries older than 60 seconds
+            while self.minute_window and now - self.minute_window[0] > 60:
+                self.minute_window.popleft()
+
+            if len(self.minute_window) >= self.rpm:
+                # Must wait until oldest entry expires
+                wait_sec = 60 - (now - self.minute_window[0]) + 0.1
+                logger.info(f"{provider_name}: RPM limit, waiting {wait_sec:.1f}s")
+                await asyncio.sleep(wait_sec)
+                # Re-evict after sleep
+                now = time.monotonic()
+                while self.minute_window and now - self.minute_window[0] > 60:
+                    self.minute_window.popleft()
+
+            if self.day_total >= self.rpd:
+                raise RuntimeError(f"{provider_name}: Daily limit {self.rpd} reached. Use fallback.")
+
+            self.minute_window.append(now)
+            self.day_total += 1
+
+# One instance per provider, at module level:
+GROQ_LIMITER   = ProviderRateLimiter(rpm=30, rpd=1000)
+GOOGLE_LIMITER = ProviderRateLimiter(rpm=15, rpd=1500)
+
+# In your base_agent.py, call before every API request:
+# await GROQ_LIMITER.acquire("Groq")
+    </pre>
+    <p><strong>Uncertainty note:</strong> I am not certain of the exact Groq RPD limits per model. The search results showed 1000 RPD for llama-3.3-70b-versatile and higher for the 8b model. Worth verifying from <a href="https://console.groq.com/docs/rate-limits">console.groq.com/docs/rate-limits</a> before hardcoding these numbers.</p>
+  </div>
+
+  <div class="card cw">
+    <div class="tag tw">Problem: asyncio.gather() fires all 3 agents simultaneously</div>
+    <pre class="bad">
+# main.py line 175:
+fund_result, tech_result, news_result = await asyncio.gather(
+    FundamentalAgent().analyze(fund_input),
+    TechnicalAgent().analyze(price_input),
+    NewsAgent().analyze(news_input),
+)
+
+# All 3 go to Groq at the same instant.
+# At 30 RPM, you have 0.5 seconds between allowed calls.
+# 3 simultaneous = 2 of the 3 will hit rate limit.</pre>
+    <pre class="good">
+# FIX Option A: Stagger the calls (safest for free tier)
+fund_result  = await FundamentalAgent().analyze(fund_input)
+await asyncio.sleep(2.0)  # let Groq breathe
+tech_result  = await TechnicalAgent().analyze(price_input)
+await asyncio.sleep(2.0)
+news_result  = await NewsAgent().analyze(news_input)
+
+# FIX Option B: Keep gather() but route to different providers
+# (no rate conflict if fund→Google, tech→Groq, news→Cerebras)
+# This is the better long-term fix — see model routing suggestion below.
+
+# Recommended routing to avoid all Groq conflicts:
+# fundamental → Google Gemini Flash (1500/day, handles long context)
+# technical   → Groq llama-3.3-70b-versatile (fast, pattern reasoning)
+# news        → Cerebras llama-3.3-70b (1M tokens/day free)
+# Then gather() is safe: 3 different providers, no shared limit.</pre>
+  </div>
+
+  <div class="card">
+    <div class="tag ta">Cerebras setup — worth adding as third provider</div>
+    <pre>
+# Add to config.py:
+CEREBRAS_API_KEY  = os.getenv("CEREBRAS_API_KEY", "")
+CEREBRAS_BASE_URL = "https://api.cerebras.ai/v1"
+
+# Cerebras is OpenAI-compatible, so your existing openai client works:
+# client = OpenAI(api_key=CEREBRAS_API_KEY, base_url=CEREBRAS_BASE_URL)
+# Model name: verify exact model IDs at cerebras.ai/docs
+# Search results indicate ~1M tokens/day free, no credit card.
+# I cannot confirm the exact model string — verify from their docs.</pre>
+    <p class="sub">Uncertainty: I verified from search that Cerebras offers approximately 1M tokens/day free without a credit card, but I cannot confirm exact current model names or API endpoint stability. Verify at cerebras.ai before building around it.</p>
+  </div>
+</div>
+
+</div>
+
+<script>
+function show(id){
+  document.querySelectorAll('.pg').forEach(p=>p.classList.remove('on'));
+  document.querySelectorAll('.t').forEach(t=>t.classList.remove('on'));
+  document.getElementById('pg-'+id).classList.add('on');
+  event.currentTarget.classList.add('on');
+}
+</script>

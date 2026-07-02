@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Council Dashboard — Indian Stock Engine</title>
+    <meta name="description" content="Real-time dashboard for the Indian Stock AI Council Engine with market regime, sector analysis, and stock recommendations">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="app">
+        <!-- Sidebar -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <div class="logo">
+                    <span class="logo-icon">🏛️</span>
+                    <span class="logo-text">AI Council</span>
+                </div>
+                <span class="logo-version">v1.0</span>
+            </div>
+            <nav class="sidebar-nav">
+                <a class="nav-item active" data-page="overview" onclick="showPage('overview')">
+                    <span class="nav-icon">📊</span> Overview
+                </a>
+                <a class="nav-item" data-page="stocks" onclick="showPage('stocks')">
+                    <span class="nav-icon">📈</span> Stock Calls
+                </a>
+                <a class="nav-item" data-page="sectors" onclick="showPage('sectors')">
+                    <span class="nav-icon">🏭</span> Sectors
+                </a>
+                <a class="nav-item" data-page="council" onclick="showPage('council')">
+                    <span class="nav-icon">🤖</span> Council Votes
+                </a>
+                <a class="nav-item" data-page="history" onclick="showPage('history')">
+                    <span class="nav-icon">📋</span> History
+                </a>
+            </nav>
+            <div class="sidebar-footer">
+                <button class="run-btn" onclick="refreshData()">
+                    <span>⚡</span> Refresh Data
+                </button>
+                <div class="last-update" id="last-update">No data loaded</div>
+            </div>
+        </aside>
+
+        <!-- Main content -->
+        <main class="main">
+            <!-- Overview page -->
+            <div class="page active" id="page-overview">
+                <div class="page-header">
+                    <h1>Market Overview</h1>
+                    <div class="header-badges">
+                        <span class="regime-badge" id="regime-badge">Loading...</span>
+                        <span class="date-badge" id="date-badge"></span>
+                    </div>
+                </div>
+
+                <!-- Top metrics -->
+                <div class="metrics-row" id="top-metrics">
+                    <div class="metric-card glow-green" id="metric-vix">
+                        <div class="metric-value">—</div>
+                        <div class="metric-label">India VIX</div>
+                        <div class="metric-sub" id="vix-status">Loading</div>
+                    </div>
+                    <div class="metric-card glow-purple" id="metric-mmi">
+                        <div class="metric-value">—</div>
+                        <div class="metric-label">Market Mood</div>
+                        <div class="metric-sub" id="mmi-label">Loading</div>
+                    </div>
+                    <div class="metric-card glow-blue" id="metric-sentiment">
+                        <div class="metric-value">—</div>
+                        <div class="metric-label">Sentiment Score</div>
+                        <div class="metric-sub">/100</div>
+                    </div>
+                    <div class="metric-card glow-amber" id="metric-multiplier">
+                        <div class="metric-value">—</div>
+                        <div class="metric-label">Position Multiplier</div>
+                        <div class="metric-sub">based on sentiment</div>
+                    </div>
+                </div>
+
+                <!-- Signal summary -->
+                <div class="signal-summary">
+                    <div class="signal-card buy">
+                        <div class="signal-count" id="buy-count">0</div>
+                        <div class="signal-label">BUY</div>
+                    </div>
+                    <div class="signal-card hold">
+                        <div class="signal-count" id="hold-count">0</div>
+                        <div class="signal-label">HOLD</div>
+                    </div>
+                    <div class="signal-card avoid">
+                        <div class="signal-count" id="avoid-count">0</div>
+                        <div class="signal-label">AVOID</div>
+                    </div>
+                </div>
+
+                <!-- Macro assessment -->
+                <div class="assessment-card" id="macro-assessment">
+                    <h3>📊 Macro Assessment</h3>
+                    <p id="macro-reasoning">Loading market analysis...</p>
+                </div>
+
+                <!-- Top picks -->
+                <h2 class="section-title">🏆 Top Picks (by confidence)</h2>
+                <div class="top-picks" id="top-picks">
+                    <div class="empty-state">Run the engine to see recommendations</div>
+                </div>
+            </div>
+
+            <!-- Stocks page -->
+            <div class="page" id="page-stocks">
+                <div class="page-header">
+                    <h1>Stock Recommendations</h1>
+                </div>
+                <div class="stocks-list" id="stocks-list">
+                    <div class="empty-state">No data available. Run the engine first.</div>
+                </div>
+            </div>
+
+            <!-- Sectors page -->
+            <div class="page" id="page-sectors">
+                <div class="page-header">
+                    <h1>Sector Rotation</h1>
+                </div>
+                <div class="sectors-grid" id="sectors-grid">
+                    <div class="empty-state">No sector data available.</div>
+                </div>
+            </div>
+
+            <!-- Council page -->
+            <div class="page" id="page-council">
+                <div class="page-header">
+                    <h1>Council Architecture</h1>
+                </div>
+                <div class="council-grid">
+                    <div class="agent-card">
+                        <div class="agent-badge" style="background: rgba(34,197,94,0.15); color: #22c55e;">Gemini Flash</div>
+                        <h3>Agent 1 — Macro</h3>
+                        <p class="agent-role">Market Regime & Sentiment</p>
+                        <p class="agent-desc">Analyzes India VIX, MMI, Nifty vs 200DMA, FII flows. Classifies Bull/Bear/Neutral. Scores sentiment 0-100.</p>
+                    </div>
+                    <div class="agent-card">
+                        <div class="agent-badge" style="background: rgba(34,197,94,0.15); color: #22c55e;">Gemini Flash</div>
+                        <h3>Agent 2 — Sector</h3>
+                        <p class="agent-role">Sector Rotation Analysis</p>
+                        <p class="agent-desc">Ranks 8 NSE sectors by relative strength. Identifies top 2-3 sectors. Flags laggards to avoid.</p>
+                    </div>
+                    <div class="agent-card">
+                        <div class="agent-badge" style="background: rgba(99,102,241,0.15); color: #6366f1;">DeepSeek R1</div>
+                        <h3>Agent 3 — Fundamental</h3>
+                        <p class="agent-role">Stock Quality Filter</p>
+                        <p class="agent-desc">Evaluates ROE, D/E, revenue growth from Screener.in. Scores quality 0-10. Reasoning model for financial math.</p>
+                    </div>
+                    <div class="agent-card">
+                        <div class="agent-badge" style="background: rgba(99,102,241,0.15); color: #6366f1;">DeepSeek V3</div>
+                        <h3>Agent 4 — Technical</h3>
+                        <p class="agent-role">Chart & Price Analysis</p>
+                        <p class="agent-desc">Identifies entry zones, ATR-based stop-loss, support/resistance from precomputed OHLCV indicators.</p>
+                    </div>
+                    <div class="agent-card">
+                        <div class="agent-badge" style="background: rgba(168,85,247,0.15); color: #a855f7;">Llama 4 Maverick</div>
+                        <h3>Agent 5 — News</h3>
+                        <p class="agent-role">Catalyst & Sentiment</p>
+                        <p class="agent-desc">Analyzes ET/Moneycontrol headlines. Identifies catalysts. Scores sentiment -5 to +5. Flags regulatory risks.</p>
+                    </div>
+                    <div class="agent-card chairman">
+                        <div class="agent-badge" style="background: rgba(234,179,8,0.15); color: #eab308;">Gemini Pro</div>
+                        <h3>Agent 6 — Chairman</h3>
+                        <p class="agent-role">Final Synthesis</p>
+                        <p class="agent-desc">Synthesizes all 5 agents into BUY/HOLD/AVOID. Sets entry, SL%, targets, confidence. Weights: Fund 25%, Tech 25%, Macro 20%, Sector 15%, News 15%.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- History page -->
+            <div class="page" id="page-history">
+                <div class="page-header">
+                    <h1>Call History</h1>
+                </div>
+                <div class="history-table-wrapper">
+                    <div class="empty-state" id="history-content">
+                        Historical data will accumulate as you run the engine daily.
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

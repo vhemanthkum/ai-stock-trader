@@ -1,0 +1,550 @@
+
+<h2 class="sr-only">Institutional review of the Indian Stock AI Council Engine — problems, fixes, and the complete upgraded blueprint</h2>
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+.wrap{padding:1.5rem 0;font-family:var(--font-sans)}
+nav{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:1.5rem}
+button.t{background:transparent;border:0.5px solid var(--border-strong);color:var(--text-secondary);padding:6px 13px;border-radius:var(--radius);font-size:13px;cursor:pointer;font-family:var(--font-sans);transition:all .15s}
+button.t:hover{background:var(--surface-1);color:var(--text-primary)}
+button.t.on{background:var(--bg-accent);border-color:var(--border-accent);color:var(--text-accent);font-weight:500}
+.pg{display:none}.pg.on{display:block}
+h2{font-size:18px;font-weight:500;margin-bottom:4px;color:var(--text-primary)}
+h3{font-size:15px;font-weight:500;margin-bottom:8px;color:var(--text-primary)}
+h4{font-size:14px;font-weight:500;margin-bottom:5px;color:var(--text-primary)}
+p{font-size:14px;color:var(--text-secondary);line-height:1.7;margin-bottom:10px}
+.sub{font-size:13px;color:var(--text-muted);margin-bottom:1.5rem}
+.card{background:var(--surface-1);border:0.5px solid var(--border);border-radius:12px;padding:1rem 1.25rem;margin-bottom:10px}
+.card-d{border-color:var(--border-danger);background:var(--bg-danger)}
+.card-w{border-color:var(--border-warning);background:var(--bg-warning)}
+.card-s{border-color:var(--border-success);background:var(--bg-success)}
+.card-a{border-color:var(--border-accent);background:var(--bg-accent)}
+.tag{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:500;padding:3px 9px;border-radius:999px;margin-bottom:8px}
+.tag-d{background:var(--bg-danger);color:var(--text-danger);border:0.5px solid var(--border-danger)}
+.tag-w{background:var(--bg-warning);color:var(--text-warning);border:0.5px solid var(--border-warning)}
+.tag-s{background:var(--bg-success);color:var(--text-success);border:0.5px solid var(--border-success)}
+.tag-a{background:var(--bg-accent);color:var(--text-accent);border:0.5px solid var(--border-accent)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px}
+.stat{background:var(--surface-1);border:0.5px solid var(--border);border-radius:var(--radius);padding:12px 14px}
+.stat-l{font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px}
+.stat-v{font-size:20px;font-weight:500}
+.stat-s{font-size:11px;color:var(--text-muted);margin-top:2px}
+code{font-family:var(--font-mono);font-size:12px;background:var(--surface-1);border:0.5px solid var(--border);padding:1px 6px;border-radius:4px;color:var(--text-accent)}
+pre{font-family:var(--font-mono);font-size:12px;background:var(--surface-1);border:0.5px solid var(--border);border-radius:var(--radius);padding:12px;overflow-x:auto;margin-bottom:10px;line-height:1.6;color:var(--text-secondary)}
+.step{display:flex;gap:12px;margin-bottom:14px}
+.sn{width:26px;height:26px;min-width:26px;border-radius:50%;background:var(--bg-accent);color:var(--text-accent);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:500;border:0.5px solid var(--border-accent)}
+.sb h4{font-size:14px;font-weight:500;margin-bottom:3px}
+.sb p{font-size:13px;margin-bottom:0}
+table{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:10px}
+th{text-align:left;padding:7px 10px;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);border-bottom:0.5px solid var(--border-strong);font-weight:500}
+td{padding:8px 10px;border-bottom:0.5px solid var(--border);color:var(--text-secondary);vertical-align:top}
+tr:last-child td{border-bottom:none}
+.pos{color:var(--text-success)}
+.neg{color:var(--text-danger)}
+.warn{color:var(--text-warning)}
+.acc{color:var(--text-accent)}
+.muted{color:var(--text-muted);font-size:12px}
+hr{border:none;border-top:0.5px solid var(--border);margin:1.2rem 0}
+</style>
+
+<div class="wrap">
+<nav>
+  <button class="t on" onclick="show('verdict')">Verdict</button>
+  <button class="t" onclick="show('screener')">Screener flaws</button>
+  <button class="t" onclick="show('strategy')">My strategy</button>
+  <button class="t" onclick="show('stocks')">Stock count</button>
+  <button class="t" onclick="show('apis')">API stack</button>
+  <button class="t" onclick="show('blueprint')">Full blueprint</button>
+</nav>
+
+<!-- VERDICT -->
+<div id="pg-verdict" class="pg on">
+  <h2>Verdict — what I actually think of your engine</h2>
+  <p class="sub">Read every code file. Here is the honest institutional assessment.</p>
+
+  <div class="card card-s" style="margin-bottom:10px">
+    <div class="tag tag-s">What works</div>
+    <h3 style="color:var(--text-success)">Architecture is genuinely solid</h3>
+    <p>The separation of data collection → agent analysis → chairman synthesis is correct institutional design. The async parallel agent calls per stock, the retry logic pattern, the SQLite logging, the macro regime gate — these are real concepts done right. Most retail quant projects I've seen don't get this far. You have a working skeleton.</p>
+  </div>
+
+  <div class="card card-d">
+    <div class="tag tag-d">Critical flaw 1</div>
+    <h3 style="color:var(--text-danger)">The screener is toy math, not institutional screening</h3>
+    <p>Volume surge +30 pts, price breakout +25 pts, oversold drop +20 pts — this is momentum chasing with arbitrary weights, not a screening system. The fundamental overlay is a scoring afterthought, not a gate. An institutional screener eliminates first, ranks second. Your system ranks without eliminating, which means garbage stocks with high momentum scores (illiquid microcaps, stocks with bloated volume from operator activity, stocks at 52-week lows on bad earnings) pass into your council's queue. The LLMs then waste tokens on stocks that should never have gotten through.</p>
+  </div>
+
+  <div class="card card-d">
+    <div class="tag tag-d">Critical flaw 2</div>
+    <h3 style="color:var(--text-danger)">Fundamental agent using llama-3.3-70b-versatile is wrong</h3>
+    <p>You assigned fundamental analysis — the most complex reasoning task involving 5-year financial history, promoter pledging, forensic accounting signals, ROCE trajectory — to Groq's llama-3.3-70b-versatile with a 4096 token limit. This model will confidently confabulate numbers it doesn't have. The Chairman on Gemini Flash is worse. Neither has actual access to Screener.in, BSE filings, or concall transcripts. They are reasoning over whatever you pass in the prompt — so your output quality is bounded entirely by the quality of your data pipeline, which I cannot verify from the files you shared.</p>
+  </div>
+
+  <div class="card card-w">
+    <div class="tag tag-w">Structural problem 3</div>
+    <h3 style="color:var(--text-warning)">API fallback chain will silently degrade quality</h3>
+    <p>When Groq 429s and falls back to Gemini Flash, the output format and reasoning depth change. You are not flagging this degradation in your output. A BUY call from llama-3.3-70b-versatile and a BUY call from llama-3.1-8b-instant (after fallback) are not the same confidence level. The report will show them identically. An institutional system marks the model that produced each call and weights confidence scores accordingly.</p>
+  </div>
+
+  <div class="card card-w">
+    <div class="tag tag-w">Structural problem 4</div>
+    <h3 style="color:var(--text-warning)">NVIDIA DeepSeek R1 allocation is missing from actual code</h3>
+    <p>config.py says NVIDIA_BASE_URL is set, test_nvidia.py exists — but the AGENT_MODELS dict assigns fundamental to <code>groq / llama-3.3-70b-versatile</code>, not NVIDIA. Your design doc says A3 = DeepSeek R1 on NVIDIA GPU infrastructure. That's not implemented. Worth verifying whether your NVIDIA key is actually being routed anywhere.</p>
+  </div>
+
+  <div class="card card-w">
+    <div class="tag tag-w">Structural problem 5</div>
+    <h3 style="color:var(--text-warning)">4-second flat throttle is both wasteful and insufficient</h3>
+    <p>You sleep 4.0 seconds between every stock regardless of which provider just responded. If Groq replied in 200ms, you waste 3.8 seconds. If Google is having a slow day and replied in 3.9s, you're sending the next call 100ms later — right into the next rate window. You need per-provider rate tracking with a token bucket or sliding window counter, not a flat sleep.</p>
+  </div>
+
+  <div class="card card-a">
+    <div class="tag tag-a">Bottom line</div>
+    <h3 style="color:var(--text-accent)">It will produce output. The question is whether to trust it.</h3>
+    <p>The engine will run, call APIs, produce BUY/HOLD/AVOID calls, and generate HTML reports. But as it stands, the screener doesn't eliminate low-quality candidates properly, the models are not matched to the task depth, and the output confidence scores have no calibration against historical calls. You cannot use this for real capital without a backtest layer and a screener overhaul. Fix the screener first — everything downstream gets better automatically.</p>
+  </div>
+</div>
+
+<!-- SCREENER FLAWS -->
+<div id="pg-screener" class="pg">
+  <h2>Screener — what's wrong and how institutions actually do it</h2>
+  <p class="sub">Your current scoring matrix vs. what a two-stage institutional screener looks like.</p>
+
+  <div class="card card-d">
+    <div class="tag tag-d">What's wrong with your math</div>
+    <table>
+      <tr><th>Your rule</th><th>Problem</th></tr>
+      <tr><td>Volume > 2× average → +30 pts</td><td class="neg">Operator/manipulated stocks routinely show 5-10× volume spikes. This signal is highest for the worst stocks.</td></tr>
+      <tr><td>Price up >3% → +25 pts</td><td class="neg">Chasing already-moved stocks. By the time +3% is on the screen, retail is buying institutional exits.</td></tr>
+      <tr><td>Price down >3% → +20 pts</td><td class="neg">Catching falling knives. Stocks fall 3% for both "oversold buy" and "earnings disaster". Your screener can't tell the difference.</td></tr>
+      <tr><td>Above 20-SMA → +20 pts</td><td class="warn">Weak signal alone. 200-DMA is the institutional reference, not 20-SMA.</td></tr>
+      <tr><td>Block deal >₹10 Cr → +20 pts</td><td class="pos">This is actually useful. Keep it.</td></tr>
+      <tr><td>FII net buyer → +5 pts</td><td class="warn">Only 5 points for the most important institutional signal? This should be a gate, not a small addend.</td></tr>
+      <tr><td>Google News trending → +15 pts</td><td class="neg">News trending means retail attention, which means late entry. This often correlates inversely with good entry points.</td></tr>
+    </table>
+  </div>
+
+  <div class="card card-s">
+    <div class="tag tag-s">The correct two-stage structure</div>
+    <h3>Stage 1A — Hard elimination gates (Boolean, sequential)</h3>
+    <p>Run these first. Any fail = stock dropped immediately. No points, no ranking.</p>
+    <pre>
+ELIMINATION GATES (run in this order — cheapest first):
+1. Market cap ≥ ₹500 Cr                  [data: yfinance marketCap]
+2. Avg daily volume ≥ 2L shares (20-day)  [data: yfinance volume]
+3. Stock above 200-DMA                    [computed from OHLCV]
+4. Promoter holding ≥ 40%                 [data: Screener.in / quarterly]
+5. Promoter pledge ≤ 20%                  [data: BSE filings]
+6. Debt/Equity ≤ 1.5 (non-BFSI)          [data: yfinance or Screener]
+7. Not in SEBI F&O ban list (if swing)    [NSE website, daily list]
+8. Operating cash flow positive (last 2yr) [Screener.in data]
+    </pre>
+    <p>This alone cuts Nifty 500 to approximately 150–180 stocks typically. Worth verifying this estimate against current data.</p>
+
+    <hr>
+    <h3>Stage 1B — Momentum + quality scoring (only on survivors)</h3>
+    <p>Now rank. Scoring with institutional weights:</p>
+    <pre>
+MOMENTUM SCORE (40% weight):
+  +35 pts: Price within 5% of 52-week high (breakout setup)
+  +25 pts: 50-DMA crossed above 200-DMA in last 20 days (golden cross)
+  +20 pts: RSI 50–65 (trending, not overbought)
+  +20 pts: Volume 1.5×–3× average (accumulation zone, not spike)
+  -30 pts: RSI > 78 (overbought, late entry)
+  -40 pts: 50-DMA below 200-DMA and falling (downtrend)
+
+QUALITY SCORE (35% weight):
+  +30 pts: ROE > 18% (trailing 3yr average)
+  +25 pts: ROCE > 15%
+  +20 pts: Revenue growth > 15% last 2 years
+  +15 pts: Operating margin expansion (this yr vs last yr)
+  -30 pts: Gross NPA > 3% (for banks/NBFC)
+  -25 pts: Promoter pledge > 10% (yellow flag even if <20%)
+
+INSTITUTIONAL FLOW (25% weight):
+  +40 pts: FII net buyer 3-day > ₹500 Cr sector-level
+  +30 pts: MF fresh buying in last monthly disclosure
+  +20 pts: Block deal > ₹25 Cr (your ₹10 Cr threshold is too low)
+  +15 pts: Stock in F&O (confirms institutional size-ability)
+  -20 pts: FII net seller 5-day consecutive
+    </pre>
+    <p>Top 25–30 by composite score go to the council. Not 15 — more on that next tab.</p>
+  </div>
+
+  <div class="card">
+    <div class="tag tag-a">One critical add: sector context gate</div>
+    <h3>A stock's score means nothing without sector context</h3>
+    <p>A pharma stock scoring 72 points in a sector that is in relative weakness vs. Nifty is weaker than a banking stock scoring 65 points in the top-performing sector. Your screener has no sector-relative strength normalization. Add a sector RS multiplier: if the stock's sector is top 3 in relative strength this week, multiply momentum score by 1.2. Bottom 3 sector: multiply by 0.7.</p>
+  </div>
+</div>
+
+<!-- MY STRATEGY -->
+<div id="pg-strategy" class="pg">
+  <h2>How I would personally pick and trade — 20 years institutional lens</h2>
+  <p class="sub">This is how the engine should think, not just what rules to follow.</p>
+
+  <div class="card card-a">
+    <div class="tag tag-a">The philosophy first</div>
+    <p>I look for three things aligning simultaneously: a business I understand, a price that makes sense, and a market environment where being long is not fighting gravity. When all three align, I size up. When any one is absent, I wait. Most of the time, the right answer is wait. The biggest mistake your engine makes right now is it tries to produce BUY calls every day. Markets give you maybe 40–50 good setups per year per sector. Your job is to catch those 40–50, not manufacture 15 per day.</p>
+  </div>
+
+  <div class="card">
+    <h3>My personal stock selection hierarchy</h3>
+    <div class="step">
+      <div class="sn">1</div>
+      <div class="sb">
+        <h4>Market regime first — always</h4>
+        <p>If Nifty is below 200-DMA and India VIX is above 20, I do not go long anything regardless of how good the stock looks. I either go to cash or short via index puts. Your engine has a VIX gate at 17 and 22 — that is directionally right, worth keeping. But it needs to also check Nifty vs. 200-DMA. Many bad days in 2022 and 2024 had VIX under 17 while Nifty was clearly in downtrend.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="sn">2</div>
+      <div class="sb">
+        <h4>Sector rotation second — before individual stocks</h4>
+        <p>Which 2–3 sectors are showing the best relative strength vs. Nifty 500 this month? Only go hunting in those sectors. Trying to pick a winning stock in a weak sector is hard mode — you fight the macro headwind. Your sector agent exists but is not upstream enough. Sector rotation should be the input that determines which part of your 500-stock universe you even look at, cutting it to maybe 100–150 before any other filter.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="sn">3</div>
+      <div class="sb">
+        <h4>Quality gate — non-negotiable eliminators</h4>
+        <p>I will not touch a company where: promoter has pledged more than 15% shares, auditor has changed in last 2 years without explanation, operating cash flow is negative for 2+ consecutive years, gross block additions don't match claimed capex (forensic signal), or revenue recognition is unusually front-loaded in Q4. These are red flags that no volume surge or momentum score overrides.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="sn">4</div>
+      <div class="sb">
+        <h4>Setup type — what am I actually trading?</h4>
+        <p>I need to know before entry: is this a momentum breakout (price near 52-wk high, volume confirming), a mean reversion play (fundamentally strong stock oversold on market fear, not company news), or a catalyst play (earnings, order win, sector policy). Each setup has different entry, stop, and target logic. Your chairman agent currently tries to do all three simultaneously in one prompt — that's too vague. Force it to classify setup type first, then apply setup-specific rules.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="sn">5</div>
+      <div class="sb">
+        <h4>Entry precision — not ranges, actual levels</h4>
+        <p>Your engine produces entry_range_low to entry_range_high. That's fine for output display. But internally, the agent should produce a specific entry trigger: "buy on a close above ₹1,247 with volume > 1.8× average" or "buy on a retest of the 50-DMA if it holds above ₹1,190". A ₹50 entry range means nothing actionable. The model should cite a specific technical level it is watching.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="sn">6</div>
+      <div class="sb">
+        <h4>Stop-loss — ATR-based, not percentage</h4>
+        <p>Your config shows DEFAULT_STOP_LOSS_PCT = 7.0 and ATR_STOP_MULTIPLIER = 2.0. The ATR stop is correct. The 7% flat stop is wrong — for a volatile stock with ATR of ₹85, a 7% stop on a ₹500 stock (₹35 = 7%) would be hit by normal intraday noise. Stop = entry price minus 2×ATR(14). No exceptions. If that gives you a stop that risks more than 1% of portfolio on a 0.5% position size rule, the position is too large — scale it down, don't move the stop.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="sn">7</div>
+      <div class="sb">
+        <h4>Target — asymmetric, staged</h4>
+        <p>Minimum 2:1 reward:risk before entry. Preferred 3:1. Target 1 = 1× ATR above breakout level (take 40% off). Target 2 = previous resistance / measured move (take 40% off). Let 20% run with trailing stop at 10-DMA. This staged exit removes the psychology problem of "when do I sell." Your engine shows target_1 and target_2 — good structure, but they need to be calculated from ATR and resistance levels, not just percentages.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="card card-w">
+    <div class="tag tag-w">What I would add to your agent prompts</div>
+    <h3>The chairman's prompt needs a decision tree, not free-form synthesis</h3>
+    <p>Currently your Chairman agent gets 5 agent reports and synthesizes freely. Institutionally, synthesis follows a fixed decision tree:</p>
+    <pre>
+IF macro_regime == "Bear" OR vix > 22:
+    → AVOID regardless of stock quality
+
+IF sector_RS < 0 (underperforming Nifty):
+    → HOLD at best, no BUY
+
+IF fundamental.quality_score < 6/10:
+    → AVOID regardless of technicals
+
+IF technical.signal == "SELL" AND news.sentiment < 0:
+    → AVOID
+
+IF all above pass:
+    → classify setup_type (breakout / mean_reversion / catalyst)
+    → apply setup-specific entry/stop/target logic
+    → output BUY with specific levels
+    </pre>
+    <p>This deterministic gating prevents the model from confabulating a BUY on a stock that fails basic quality screens.</p>
+  </div>
+</div>
+
+<!-- STOCK COUNT -->
+<div id="pg-stocks" class="pg">
+  <h2>How many stocks? The honest answer.</h2>
+  <p class="sub">You have 4pm–9am next day. That's approximately 17 hours. Here's how to use them.</p>
+
+  <div class="grid3">
+    <div class="stat"><div class="stat-l">Universe</div><div class="stat-v">Nifty 500</div><div class="stat-s">Right size, don't expand</div></div>
+    <div class="stat"><div class="stat-l">After Stage 1A gates</div><div class="stat-v acc">~150–180</div><div class="stat-s">Verify against current data</div></div>
+    <div class="stat"><div class="stat-l">After Stage 1B scoring</div><div class="stat-v acc">Top 30</div><div class="stat-s">Send to council</div></div>
+  </div>
+
+  <div class="card card-d">
+    <div class="tag tag-d">15 stocks is too few</div>
+    <h3 style="color:var(--text-danger)">Here is why 15 is the wrong number</h3>
+    <p>On a given day, out of your top 15, maybe 3–5 will have genuinely good setups. The rest will be forced marginal calls. If your screener drops a genuinely good setup at rank 16 because it scored 2 points lower on Google News trending, you've lost a real trade. With 17 hours of analysis time and free APIs with substantial daily limits, 15 is an artificial constraint that costs you alpha.</p>
+  </div>
+
+  <div class="card card-s">
+    <div class="tag tag-s">The right number: 25–30</div>
+    <h3 style="color:var(--text-success)">Why 25–30 works and how to fit in the time window</h3>
+    <table>
+      <tr><th>Phase</th><th>Time estimate</th><th>What happens</th></tr>
+      <tr><td>Data collection (500 stocks)</td><td>~8–12 min</td><td>yfinance bulk download, screener scrape</td></tr>
+      <tr><td>Stage 1A gates (500→~160)</td><td>~2 min</td><td>Pure math, no API</td></tr>
+      <tr><td>Stage 1B scoring (160→30)</td><td>~3 min</td><td>Pure math, no API</td></tr>
+      <tr><td>Council analysis (30 stocks × 4 agents)</td><td>~60–90 min</td><td>With 4-sec throttle per stock</td></tr>
+      <tr><td>Chairman synthesis (30 × 1)</td><td>~20–30 min</td><td>One call per stock</td></tr>
+      <tr><td>Report generation</td><td>~2 min</td><td>HTML + SQLite</td></tr>
+      <tr><td><strong>Total</strong></td><td class="pos"><strong>~2–2.5 hours</strong></td><td>Done by 6:30pm easily</td></tr>
+    </table>
+    <p>You have 17 hours. The analysis finishes in 2–2.5 hours at 30 stocks. The remaining time is for you to review the report, verify the top 5 BUY calls manually against Screener.in and BSE filings, and set your order parameters for the next day open.</p>
+  </div>
+
+  <div class="card">
+    <h3>500 stocks — is it enough?</h3>
+    <p>Yes. Nifty 500 covers approximately 95% of total NSE market capitalization (worth verifying this figure against current NSE data). Everything below it is microcap/smallcap territory with liquidity risk, operator activity risk, and data quality problems that will break your yfinance pipeline. If you eventually want to expand, add Nifty Midcap 150 as a separate universe — but with stricter liquidity gates. Don't expand to 1000+ stocks until your screener is working correctly on 500.</p>
+  </div>
+
+  <div class="card card-w">
+    <div class="tag tag-w">What to do with the 25–30 outputs</div>
+    <p>Don't act on all BUY calls. Filter the council's output: only act on calls where confidence ≥ 70%, the setup type is "breakout" or "mean_reversion" (not speculative), fundamental quality ≥ 7/10, AND the sector is in top 3 relative strength. This typically leaves you 3–6 actionable ideas per run. That's the right number to actually trade.</p>
+  </div>
+</div>
+
+<!-- APIs -->
+<div id="pg-apis" class="pg">
+  <h2>API stack — problems and the right configuration</h2>
+  <p class="sub">Specific issues in your current setup and what to change.</p>
+
+  <div class="card card-d">
+    <div class="tag tag-d">Problem 1: NVIDIA is configured but not routed</div>
+    <p>AGENT_MODELS has no entry routing to NVIDIA. Your NVIDIA_API_KEY and NVIDIA_BASE_URL sit in config.py unused by any agent. Your test_nvidia.py just lists models. Either implement a proper NVIDIA client class and route the fundamental agent to it, or remove NVIDIA entirely — dead config adds confusion. Worth checking: NVIDIA's free credits may have expired depending on when you signed up.</p>
+  </div>
+
+  <div class="card card-d">
+    <div class="tag tag-d">Problem 2: Wrong model for fundamental analysis</div>
+    <p>Groq's <code>llama-3.3-70b-versatile</code> is excellent for fast reasoning over structured text. But fundamental analysis requires the model to reason over 5-year financial statements, compute ROCE from raw balance sheet numbers, detect forensic red flags in cash flow patterns — this needs maximum context window and reasoning depth. On free tiers, the right assignment is:</p>
+    <table>
+      <tr><th>Agent</th><th>Best free model</th><th>Why</th></tr>
+      <tr><td>Fundamental (A3)</td><td>Gemini 2.5 Flash (Google)</td><td>1M context, handles long financial data, 1500 req/day</td></tr>
+      <tr><td>Technical (A4)</td><td>Groq llama-3.3-70b-versatile</td><td>Fast, good at pattern reasoning, low latency</td></tr>
+      <tr><td>News/Sentiment (A5)</td><td>Groq llama-3.1-8b-instant</td><td>Speed matters here, sentiment is simpler task</td></tr>
+      <tr><td>Macro (A1)</td><td>Gemini 2.5 Flash</td><td>Needs broad context for regime analysis</td></tr>
+      <tr><td>Sector (A2)</td><td>Groq llama-3.3-70b-versatile</td><td>Structured ranking task, fast model fine</td></tr>
+      <tr><td>Chairman (A6)</td><td>Gemini 2.5 Flash OR Claude Sonnet</td><td>Best synthesis quality; use Claude if key available</td></tr>
+    </table>
+  </div>
+
+  <div class="card card-w">
+    <div class="tag tag-w">Problem 3: Rate limit tracking is naive</div>
+    <p>You track limits only via static config constants and flat sleep delays. You need a per-provider rate tracker that counts actual requests made this minute and this day, and implements token bucket logic. Here's the minimal correct pattern:</p>
+    <pre>
+class RateLimiter:
+    def __init__(self, rpm: int, rpd: int):
+        self.rpm = rpm
+        self.rpd = rpd
+        self.minute_calls = []
+        self.day_calls = 0
+
+    async def acquire(self):
+        now = time.time()
+        # Clear calls older than 60 seconds
+        self.minute_calls = [t for t in self.minute_calls if now - t < 60]
+        if len(self.minute_calls) >= self.rpm:
+            wait = 60 - (now - self.minute_calls[0])
+            await asyncio.sleep(wait + 0.1)
+        if self.day_calls >= self.rpd:
+            raise Exception("Daily limit reached — switch to fallback")
+        self.minute_calls.append(now)
+        self.day_calls += 1
+    </pre>
+    <p>One instance per provider, injected into each agent. This replaces all your static API_DELAY constants.</p>
+  </div>
+
+  <div class="card card-w">
+    <div class="tag tag-w">Problem 4: OpenRouter free tier at 50 req/day is not enough</div>
+    <p>Your config shows OPENROUTER_RPD = 200. But from the search results I verified earlier: OpenRouter free tier without any credit is 50 requests per day. With a one-time $10 deposit it becomes 1,000/day. At 30 stocks × 5 agent calls = 150 agent calls minimum per run, 50 req/day means OpenRouter as fallback will exhaust within the first 10 stocks. Either add the $10 or remove OpenRouter from fallback and use Cerebras instead — Cerebras is genuinely 1M tokens/day free with no card required per verified search results.</p>
+  </div>
+
+  <div class="card card-s">
+    <div class="tag tag-s">Recommended free API stack (verified from search)</div>
+    <table>
+      <tr><th>Provider</th><th>Free limit</th><th>Role in your engine</th><th>No card?</th></tr>
+      <tr><td>Google AI Studio (Gemini Flash)</td><td>1500 req/day, 15 RPM</td><td>A1 Macro, A3 Fundamental, A6 Chairman</td><td class="pos">Yes</td></tr>
+      <tr><td>Groq</td><td>1000 req/day (llama-3.3-70b), 14400/day (8b)</td><td>A4 Technical, A5 News, A2 Sector</td><td class="pos">Yes</td></tr>
+      <tr><td>Cerebras</td><td>~1M tokens/day</td><td>Overflow fallback for any agent</td><td class="pos">Yes</td></tr>
+      <tr><td>OpenRouter</td><td>50/day free; 1000/day with $10 credit</td><td>Secondary fallback only</td><td class="pos">Yes (but limited)</td></tr>
+      <tr><td>Anthropic Claude</td><td>Small credit grant on new accounts</td><td>Chairman if budget allows</td><td class="warn">Verify current policy</td></tr>
+    </table>
+    <p class="muted">Note: Verify all limits directly at provider docs before building around them — free tier limits change frequently per my search results.</p>
+  </div>
+
+  <div class="card">
+    <div class="tag tag-a">Data API fix — most important</div>
+    <h3>yfinance is fragile for production</h3>
+    <p>yfinance scrapes Yahoo Finance's unofficial endpoints. It breaks on ticker symbol format changes, rate limits without clear error messages, and returns stale data during market hours. For Indian stocks specifically: promoter pledging data, quarterly concall transcripts, and FII holding patterns are not available via yfinance. Your fundamental agent is getting incomplete inputs. Minimum additions needed: pull from Screener.in export API or their unofficial JSON endpoints for fundamentals, and scrape BSE bulk deal disclosures directly (BSE has a public CSV download). Worth verifying these endpoints are still available and in what format.</p>
+  </div>
+</div>
+
+<!-- BLUEPRINT -->
+<div id="pg-blueprint" class="pg">
+  <h2>The complete upgraded blueprint</h2>
+  <p class="sub">Specific changes to make, in priority order.</p>
+
+  <div class="card card-d">
+    <div class="tag tag-d">Priority 1 — Fix the screener (do this first, everything else improves)</div>
+    <pre>
+# In stock_screener.py — replace the scoring matrix with this structure
+
+def screen_nifty500(top_n=30):
+    # --- STAGE 1A: HARD GATES (boolean, no scoring) ---
+    survivors = []
+    for stock in nifty500_universe:
+        data = yf.Ticker(stock)
+        info = data.fast_info
+
+        # Gate 1: Market cap
+        if info.market_cap < 500_00_00_000:  # < ₹500 Cr
+            continue
+        # Gate 2: Liquidity (20-day avg volume)
+        hist = data.history(period="30d")
+        avg_vol = hist['Volume'].tail(20).mean()
+        if avg_vol < 200_000:  # < 2L shares
+            continue
+        # Gate 3: Trend (above 200-DMA)
+        hist_1y = data.history(period="1y")
+        dma200 = hist_1y['Close'].tail(200).mean()
+        if hist_1y['Close'].iloc[-1] < dma200:
+            continue
+        # Gate 4: Debt check (skip if D/E unavailable)
+        de = info.get('debtToEquity', 0)
+        if de and de > 150:  # yfinance returns D/E as %, 150 = 1.5x
+            continue
+        survivors.append(stock)
+
+    # --- STAGE 1B: SCORE survivors only ---
+    scored = []
+    for stock in survivors:
+        score = compute_institutional_score(stock)
+        sector_rs = get_sector_rs(stock)
+        adjusted = score * sector_rs  # sector multiplier
+        scored.append((stock, adjusted))
+
+    scored.sort(key=lambda x: x[1], reverse=True)
+    return [s[0] for s in scored[:top_n]]
+    </pre>
+  </div>
+
+  <div class="card card-w">
+    <div class="tag tag-w">Priority 2 — Fix model routing in config.py</div>
+    <pre>
+# Replace AGENT_MODELS with this:
+AGENT_MODELS = {
+    "macro":       ("google",  "gemini-2.5-flash",          "cerebras",   "llama-3.3-70b"),
+    "sector":      ("groq",    "llama-3.3-70b-versatile",   "google",     "gemini-2.5-flash"),
+    "fundamental": ("google",  "gemini-2.5-flash",          "groq",       "llama-3.3-70b-versatile"),
+    "technical":   ("groq",    "llama-3.3-70b-versatile",   "cerebras",   "llama-3.3-70b"),
+    "news":        ("groq",    "llama-3.1-8b-instant",      "groq",       "llama-3.3-70b-versatile"),
+    "chairman":    ("google",  "gemini-2.5-flash",          "groq",       "llama-3.3-70b-versatile"),
+    # Override if Anthropic key present — done in code, not config
+}
+
+# Add to config:
+CEREBRAS_BASE_URL = "https://api.cerebras.ai/v1"
+CEREBRAS_API_KEY  = os.getenv("CEREBRAS_API_KEY", "")
+# Verify exact Cerebras model IDs from their docs before using
+    </pre>
+  </div>
+
+  <div class="card card-w">
+    <div class="tag tag-w">Priority 3 — Fix chairman prompt structure</div>
+    <pre>
+# chairman_prompt template (add to agents/chairman.py):
+
+CHAIRMAN_PROMPT = """
+You are the Chairman of an investment council analyzing {ticker}.
+
+STEP 1 — ELIMINATE: If ANY of these are true, output AVOID immediately:
+- macro.regime is "Bear" or "Severe Bear"
+- fundamental.quality_score < 6
+- fundamental.red_flags contains promoter_pledge or auditor_change
+- technical.signal is "STRONG_SELL"
+Output: {{"action": "AVOID", "reason": "<specific_flag>", "confidence": 95}}
+
+STEP 2 — CLASSIFY SETUP TYPE (only if not eliminated):
+Based on: price vs 52wk_high, RSI, volume_ratio, catalyst_present
+Options: BREAKOUT / MEAN_REVERSION / CATALYST_PLAY / NO_SETUP
+If NO_SETUP → output HOLD.
+
+STEP 3 — APPLY SETUP RULES (only if setup classified):
+BREAKOUT: Entry = within 2% of breakout level. Stop = 2×ATR below entry.
+           Target1 = +1×ATR. Target2 = +2.5×ATR. Min RR = 2:1.
+MEAN_REVERSION: Entry = at or near 200-DMA support. Stop = 3% below.
+           Target = 50-DMA or prior resistance.
+CATALYST: Entry = before catalyst event. Stop = news-based (tight).
+
+STEP 4 — POSITION SIZE:
+position_pct = (RISK_PER_TRADE / stop_loss_pct) × position_multiplier
+Cap at 7% of portfolio.
+
+Output JSON only. No prose outside the JSON block.
+"""
+    </pre>
+  </div>
+
+  <div class="card card-s">
+    <div class="tag tag-s">Priority 4 — Add calibration tracking (the institutional layer you're missing)</div>
+    <pre>
+# In storage/db.py — add these columns to your calls table:
+"""
+ALTER TABLE calls ADD COLUMN model_used TEXT;
+ALTER TABLE calls ADD COLUMN screener_rank INTEGER;
+ALTER TABLE calls ADD COLUMN screener_score REAL;
+ALTER TABLE calls ADD COLUMN setup_type TEXT;
+ALTER TABLE calls ADD COLUMN actual_outcome TEXT;  -- filled in manually or next-day check
+ALTER TABLE calls ADD COLUMN actual_return_pct REAL;
+"""
+
+# Weekly: run this query
+"""
+SELECT model_used, setup_type,
+       AVG(CASE WHEN actual_outcome='WIN' THEN 1.0 ELSE 0.0 END) as win_rate,
+       AVG(actual_return_pct) as avg_return,
+       COUNT(*) as call_count
+FROM calls
+WHERE actual_outcome IS NOT NULL
+GROUP BY model_used, setup_type
+ORDER BY avg_return DESC;
+"""
+    </pre>
+    <p>This tells you which model + setup combination is actually working. After 4–6 weeks of data, you can weight confidence scores by historical accuracy per model per setup type. That's how institutional systems self-calibrate.</p>
+  </div>
+
+  <div class="card">
+    <div class="tag tag-a">Final honest opinion</div>
+    <h3>What you have vs. what institutions have</h3>
+    <table>
+      <tr><th>Layer</th><th>Your engine now</th><th>Institutional equivalent</th></tr>
+      <tr><td>Data quality</td><td class="warn">yfinance only</td><td>Bloomberg / Refinitiv + alternative data</td></tr>
+      <tr><td>Screener logic</td><td class="neg">Momentum point scoring</td><td>Hard gates + multi-factor ranked model</td></tr>
+      <tr><td>Analysis depth</td><td class="warn">LLM over summary data</td><td>LLM over full 10-year filings + concalls</td></tr>
+      <tr><td>Model selection</td><td class="warn">Free tier routing</td><td>Task-matched fine-tuned models</td></tr>
+      <tr><td>Output calibration</td><td class="neg">Not implemented</td><td>Walk-forward backtest on 2+ years</td></tr>
+      <tr><td>Architecture</td><td class="pos">Correct pattern</td><td>Same pattern, more layers</td></tr>
+      <tr><td>Macro awareness</td><td class="pos">VIX + FII gate</td><td>Same + options skew + credit spreads</td></tr>
+    </table>
+    <p>The gap is real but closeable. Fix the screener and model routing first — those two changes alone will materially improve output quality. The calibration layer is what will eventually tell you if it's actually working.</p>
+  </div>
+</div>
+
+</div>
+
+<script>
+function show(id){
+  document.querySelectorAll('.pg').forEach(p=>p.classList.remove('on'));
+  document.querySelectorAll('.t').forEach(t=>t.classList.remove('on'));
+  document.getElementById('pg-'+id).classList.add('on');
+  event.currentTarget.classList.add('on');
+}
+</script>
